@@ -1,21 +1,31 @@
-import { Header } from "@/components/header"
-import { HeroSection } from "@/components/hero-section"
-import { UserTypeCards } from "@/components/user-type-cards"
-import { LiveEvents } from "@/components/live-events"
-import { QuickStats } from "@/components/quick-stats"
+'use client';
 
-export default function HomePage() {
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/auth/authContext';
+
+export default function Home() {
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (isAuthenticated) {
+        router.push('/dashboard');
+      } else {
+        router.push('/login');
+      }
+    }
+  }, [isAuthenticated, isLoading, router]);
+
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main>
-        <HeroSection />
-        <div className="container mx-auto px-4 py-8 space-y-12">
-          <UserTypeCards />
-          <LiveEvents />
-          <QuickStats />
-        </div>
-      </main>
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      height: '100vh' 
+    }}>
+      <p>Chargement...</p>
     </div>
-  )
+  );
 }
