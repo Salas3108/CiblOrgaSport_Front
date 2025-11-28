@@ -8,6 +8,7 @@ import { jwtDecode } from 'jwt-decode';
 
 interface AuthContextType {
   user: JwtResponse | null;
+  setUser: React.Dispatch<React.SetStateAction<JwtResponse | null>>; // <-- ajouté
   login: (credentials: LoginRequest) => Promise<void>;
   register: (userData: RegisterRequest) => Promise<void>;
   logout: () => void;
@@ -78,6 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         user,
+        setUser, // <-- inclus
         login,
         register,
         logout,
