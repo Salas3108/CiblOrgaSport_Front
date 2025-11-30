@@ -20,7 +20,9 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
+      // Appel register sans Authorization header
       await register({ username, email, password, role });
+      alert('Compte créé ! En attente de validation si nécessaire.');
     } catch (err: any) {
       setError(err.response?.data || 'Erreur lors de l\'inscription');
     } finally {
@@ -74,12 +76,7 @@ export default function RegisterPage() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              style={{ 
-                width: '100%', 
-                padding: '0.5rem 0.75rem', 
-                border: '1px solid #d1d5db', 
-                borderRadius: '0.5rem' 
-              }}
+              style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
               required
               minLength={3}
             />
@@ -93,12 +90,7 @@ export default function RegisterPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={{ 
-                width: '100%', 
-                padding: '0.5rem 0.75rem', 
-                border: '1px solid #d1d5db', 
-                borderRadius: '0.5rem' 
-              }}
+              style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
               required
             />
           </div>
@@ -111,12 +103,7 @@ export default function RegisterPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{ 
-                width: '100%', 
-                padding: '0.5rem 0.75rem', 
-                border: '1px solid #d1d5db', 
-                borderRadius: '0.5rem' 
-              }}
+              style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
               required
               minLength={6}
             />
@@ -129,31 +116,21 @@ export default function RegisterPage() {
             <select
               value={role}
               onChange={(e) => setRole(e.target.value as Role)}
-              style={{ 
-                width: '100%', 
-                padding: '0.5rem 0.75rem', 
-                border: '1px solid #d1d5db', 
-                borderRadius: '0.5rem' 
-              }}
+              style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem' }}
             >
               <option value={Role.USER}>Utilisateur</option>
               <option value={Role.ATHLETE}>Athlète</option>
               <option value={Role.SPECTATEUR}>Spectateur</option>
+              <option value={Role.VOLONTAIRE}>Volontaire</option>
+              <option value={Role.COMMISSAIRE}>Commissaire</option>
+              <option value={Role.ADMIN}>Admin</option> {/* ← ajouté */}
             </select>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            style={{ 
-              width: '100%', 
-              backgroundColor: loading ? '#9ca3af' : '#2563eb', 
-              color: 'white', 
-              padding: '0.5rem', 
-              borderRadius: '0.5rem', 
-              border: 'none',
-              fontSize: '1rem'
-            }}
+            style={{ width: '100%', backgroundColor: loading ? '#9ca3af' : '#2563eb', color: 'white', padding: '0.5rem', borderRadius: '0.5rem', border: 'none', fontSize: '1rem' }}
           >
             {loading ? 'Inscription...' : 'S\'inscrire'}
           </button>
