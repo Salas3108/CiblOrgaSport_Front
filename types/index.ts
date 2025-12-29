@@ -36,4 +36,7 @@ export interface JwtResponse {
   username: string;
   email: string;
   role: string;
+  id?: number;
+  documents?: string[];
+  validated?: boolean;
 }
