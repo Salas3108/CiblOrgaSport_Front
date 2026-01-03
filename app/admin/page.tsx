@@ -2,6 +2,7 @@
 import { Header } from "@/components/header"
 import UserValidation from "@/src/components/admin/UserValidation"
 import EventManagement from "@/src/components/admin/EventManagement"
+import ListeAthletes from "@/src/components/admin/ListeAthletes"
 import { useState } from "react"
 
 export default function AdminPage() {
@@ -46,7 +47,11 @@ export default function AdminPage() {
 
           {/* Tab Content */}
           <div>
-            {activeTab === 'users' && <UserValidation />}
+            {activeTab === 'users' && (
+              <div className="mt-8">
+                <UserValidation />
+              </div>
+            )}
             {activeTab === 'events' && <EventManagement />}
           </div>
         </div>

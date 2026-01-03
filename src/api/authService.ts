@@ -3,6 +3,50 @@ import type { AxiosResponse } from 'axios';
 
 const base = apiBases.auth;
 
+// Récupérer la liste des athlètes (ADMIN)
+export async function fetchAthletes(validated?: boolean) {
+  const token = localStorage.getItem('token');
+  let url = 'http://localhost:8080/auth/admin/athletes';
+  if (validated !== undefined) url += `?validated=${validated}`;
+  const res = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!res.ok) throw new Error('Erreur API');
+  return res.json();
+}
+
+// Valider ou rejeter un athlète (ADMIN)
+export async function adminValidateAthlete(payload: { username: string; validated: boolean }) {
+  const token = localStorage.getItem('token');
+  const res = await fetch('http://localhost:8080/auth/admin/validate-athlete', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+  // Lire le body en texte d'abord pour éviter "body stream already read"
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    data = text;
+  }
+
+  if (!res.ok) {
+    // Si le backend renvoie une erreur HTTP, lancer avec le message disponible
+    const message = typeof data === 'string' ? data : (data?.message || 'Erreur API');
+    throw new Error(message);
+  }
+
+  return data;
+}
+
 export const login = (payload: { username: string; password: string }) =>
   http.post(`${base}/auth/login`, payload).then((r: AxiosResponse<any>) => r.data);
 
@@ -19,13 +63,12 @@ export const uploadUserDocuments = (formData: FormData) =>
     headers: { 'Content-Type': 'multipart/form-data' },
   }).then((r: AxiosResponse<any>) => r.data);
 
-export const adminValidateAthlete = (payload: any) =>
-  http.post(`${base}/auth/admin/validate-athlete`, payload).then((r: AxiosResponse<any>) => r.data);
+// (removed duplicate adminValidateAthlete that used axios/http client)
 
 // Utility to persist token after login
 export const persistToken = (token: string) => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('jwt', token);
+    localStorage.setItem('token', token);
   }
 };
 
