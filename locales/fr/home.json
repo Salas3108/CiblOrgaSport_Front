@@ -1,0 +1,20 @@
+{
+  "title": "Plateforme de gestion des compétitions sportives",
+  "subtitle": "Coordonnez événements, participants, résultats et sécurité en temps réel",
+  "ctaPrimary": "Commencer",
+  "ctaSecondary": "En savoir plus",
+  "featuresTitle": "Fonctionnalités principales",
+  "features": [
+    "Planification des événements et des épreuves",
+    "Gestion des athlètes, équipes et officiels",
+    "Suivi des résultats et records",
+    "Notifications en temps réel",
+    "Incidents et sécurité",
+    "Localisation des sites et accès"
+  ],
+  "statsTitle": "Statistiques",
+  "upcomingEvents": "Événements à venir",
+  "status": "Statut",
+  "search": "Recherche",
+  "viewDetails": "Voir les détails"
+}
