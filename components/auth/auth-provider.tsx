@@ -20,7 +20,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+type Props = { children: React.ReactNode }
+
+export function AuthProvider({ children }: Props) {
   const [user, setUser] = useState<User | null>(null)
 
   useEffect(() => {
@@ -46,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     setUser(null)
     localStorage.removeItem("user")
+    localStorage.removeItem("token")
     window.location.href = "/login"
   }
 

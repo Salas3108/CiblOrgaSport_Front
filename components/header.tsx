@@ -54,7 +54,10 @@ export function Header() {
 
           {isAuthenticated ? (
             <>
-              {/* New quick sign out button */}
+              {/* New quick profile and sign out buttons */}
+              <Button variant="outline" size="sm" asChild>
+                <a href="/profile">Profile</a>
+              </Button>
               <Button variant="outline" size="sm" onClick={logout}>
                 Sign Out
               </Button>
@@ -73,6 +76,12 @@ export function Header() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <a href="/profile">
+                      <User className="h-4 w-4 mr-2" />
+                      Profile
+                    </a>
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={logout}>
                     <LogOut className="h-4 w-4 mr-2" />
                     Sign Out

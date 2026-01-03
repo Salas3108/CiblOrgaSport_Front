@@ -23,9 +23,27 @@ export function Header() {
       <div className="flex items-center gap-2">
         {/* ...existing code... other header actions ... */}
         {isAuthenticated ? (
-          <Link href="/profile">
-            <Button>Profile</Button>
-          </Link>
+          <>
+            <Link href="/profile">
+              <Button variant="outline">Profile</Button>
+            </Link>
+            <Link href="/login">
+              <Button
+                variant="outline"
+                onClick={(e) => {
+                  e.preventDefault()
+                  try {
+                    localStorage.removeItem("user")
+                    localStorage.removeItem("token")
+                  } finally {
+                    window.location.href = "/login"
+                  }
+                }}
+              >
+                Logout
+              </Button>
+            </Link>
+          </>
         ) : (
           <Link href="/login">
             <Button>Login</Button>

@@ -1,37 +1,39 @@
 "use client"
 
-import type React from "react"
+import { ReactNode, useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
+import { usePathname } from "next/navigation"
 
-import { useAuth } from "@/components/auth/auth-provider"
-import { useEffect } from "react"
-
-interface ProtectedRouteProps {
-  children: React.ReactNode
+type ProtectedRouteProps = {
   allowedRoles?: string[]
-  redirectTo?: string
+  children: React.ReactNode
 }
 
-export function ProtectedRoute({ children, allowedRoles = [], redirectTo = "/login" }: ProtectedRouteProps) {
-  const { user, isAuthenticated } = useAuth()
+export function ProtectedRoute({ allowedRoles = [], children }: ProtectedRouteProps) {
+  const { data: session, status } = useSession()
+  const pathname = usePathname()
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      window.location.href = redirectTo
-      return
-    }
+  const isAuthenticated = !!session?.user
+  const u = session?.user as { role?: string; roles?: string[] } | undefined
+  const userRoles: string[] = Array.isArray(u?.roles) ? u!.roles! : (u?.role ? [u.role] : [])
+  const hasAccess =
+    allowedRoles.length === 0
+      ? isAuthenticated
+      : isAuthenticated && allowedRoles.some((role) => userRoles.includes(role))
 
-    if (allowedRoles.length > 0 && user && !allowedRoles.includes(user.role)) {
-      window.location.href = "/"
-      return
-    }
-  }, [isAuthenticated, user, allowedRoles, redirectTo])
-
-  if (!isAuthenticated) {
-    return <div>Redirecting...</div>
+  // Show a minimal loading state while session checks
+  if (status === "loading") {
+    return <span style={{ display: "inline-block" }}>Chargement…</span>
   }
 
-  if (allowedRoles.length > 0 && user && !allowedRoles.includes(user.role)) {
-    return <div>Access denied</div>
+  // Unauthenticated: show a tiny hint instead of returning null
+  if (!isAuthenticated) {
+    return <span style={{ display: "inline-block" }}>Veuillez vous connecter.</span>
+  }
+
+  // Authenticated but lacks role access
+  if (!hasAccess) {
+    return <span style={{ display: "inline-block" }}>Accès refusé.</span>
   }
 
   return <>{children}</>

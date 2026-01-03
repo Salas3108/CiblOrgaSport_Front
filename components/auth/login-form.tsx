@@ -24,6 +24,25 @@ const getApiBaseUrl = (): string => {
   }
 }
 
+// Backend enum roles -> UI role keys
+const BACKEND_TO_UI_ROLE: Record<string, string> = {
+  USER: "spectator",
+  ATHLETE: "athlete",
+  ADMIN: "admin",
+  COMMISSAIRE: "commissaire",
+  VOLONTAIRE: "volunteer",
+}
+
+// Single source of truth for redirects based on UI role keys
+const ROLE_REDIRECTS: Record<string, string> = {
+  spectator: "/spectator",
+  athlete: "/athlete",
+  admin: "/admin",
+  commissaire: "/commissaire",
+  volunteer: "/volunteer",
+}
+const POSSIBLE_ROLES = Object.keys(ROLE_REDIRECTS)
+
 export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
@@ -95,7 +114,7 @@ export function LoginForm() {
         throw new Error(errBody?.message || "Authentication failed")
       }
 
-      const { token, user } = await res.json()
+      const { token, user, type } = await res.json()
       if (process.env.NODE_ENV === "development") {
         // eslint-disable-next-line no-console
         console.log("[LoginForm] Response body:", {
@@ -105,29 +124,30 @@ export function LoginForm() {
       }
       devLog("[LoginForm] Parsed response:", { tokenPreview: token?.slice(0, 8) + "...", user })
 
+      const backendRole = (user?.role || "").toString().trim().toUpperCase()
+      const uiRole = BACKEND_TO_UI_ROLE[backendRole] || ""
       localStorage.setItem(
         "user",
         JSON.stringify({
           username: user?.username || formData.username,
           email: user?.email || "",
-          role: user?.role || "",
+          role: backendRole, // store raw backend enum
+          uiRole, // store derived UI role for convenience
           name: user?.username || formData.username,
           authenticated: true,
+          type: type || "Bearer",
         })
       )
       localStorage.setItem("token", token)
 
-      const redirectMap: Record<string, string> = {
-        athlete: "/athlete",
-        official: "/official",
-        spectator: "/spectator",
-        volunteer: "/volunteer",
-        admin: "/admin",
+      const target = ROLE_REDIRECTS[uiRole] || "/"
+      if (!uiRole) {
+        setError(
+          `Rôle inconnu: "${user?.role}". Rôles possibles: ${POSSIBLE_ROLES.join(
+            ", "
+          )}. Redirection vers la page d’accueil.`
+        )
       }
-
-      const role = (user?.role || "").toLowerCase()
-      const target = redirectMap[role] || "/profile"
-      devLog("[LoginForm] Redirecting to:", target)
       router.push(target)
     } catch (err: any) {
       if (process.env.NODE_ENV === "development") {
@@ -162,6 +182,9 @@ export function LoginForm() {
               NEXT_PUBLIC_API_BASE_URL="http://localhost:8081". Après l’ajout, redémarrez : "npm run dev".
             </span>
           )}
+          <span className="block mt-2 text-xs text-muted-foreground">
+            Rôles supportés: {POSSIBLE_ROLES.join(", ")}
+          </span>
         </CardDescription>
       </CardHeader>
       <CardContent>

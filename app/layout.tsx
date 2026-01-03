@@ -9,7 +9,9 @@ import { NotificationProvider } from "@/components/notifications/notification-pr
 import { GeolocationProvider } from "@/components/maps/geolocation-provider"
 import { ResultsProvider } from "@/components/results/results-provider"
 import { SecurityProvider } from "@/components/security/security-provider"
+import { SessionProvider } from "next-auth/react"
 import "./globals.css"
+import ClientProviders from "@/components/providers/client-providers"
 
 export const metadata: Metadata = {
   title: "CiblOrgaSport - European Swimming Championships 2026",
@@ -25,17 +27,23 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        <AuthProvider>
-          <NotificationProvider>
-            <GeolocationProvider>
-              <ResultsProvider>
-                <SecurityProvider>
-                  <Suspense fallback={null}>{children}</Suspense>
-                </SecurityProvider>
-              </ResultsProvider>
-            </GeolocationProvider>
-          </NotificationProvider>
-        </AuthProvider>
+        <SessionProvider>
+          <AuthProvider>
+            <NotificationProvider>
+              <GeolocationProvider>
+                <ResultsProvider>
+                  <SecurityProvider>
+                    <Suspense fallback={null}>
+                      <ClientProviders>
+                        {children}
+                      </ClientProviders>
+                    </Suspense>
+                  </SecurityProvider>
+                </ResultsProvider>
+              </GeolocationProvider>
+            </NotificationProvider>
+          </AuthProvider>
+        </SessionProvider>
         <Analytics />
       </body>
     </html>

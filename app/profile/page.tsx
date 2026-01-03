@@ -10,8 +10,10 @@ type StoredUser = {
   username?: string
   email?: string
   role?: string
+  uiRole?: string
   name?: string
   authenticated?: boolean
+  type?: string
 }
 
 export default function ProfilePage() {
@@ -64,7 +66,13 @@ export default function ProfilePage() {
           <span className="font-semibold">Email:</span> {user?.email || "-"}
         </div>
         <div className="text-sm">
-          <span className="font-semibold">Rôle:</span> {user?.role || "-"}
+          <span className="font-semibold">Rôle (backend):</span> {user?.role || "-"}
+        </div>
+        <div className="text-sm">
+          <span className="font-semibold">Rôle (UI):</span> {user?.uiRole || "-"}
+        </div>
+        <div className="text-sm">
+          <span className="font-semibold">Type de token:</span> {user?.type || "-"}
         </div>
         <div className="text-xs text-muted-foreground">
           <span className="font-semibold">Token:</span> {tokenPreview || "-"}
