@@ -37,3 +37,89 @@ export const setAuthToken = (token: string) => {
   persistToken(token);
   (http.defaults.headers.common as any)['Authorization'] = `Bearer ${token}`;
 };
+
+export const adminListPendingUsers = async (role?: string) => {
+  const response = await fetch(`/api/admin/pending-users${role ? `?role=${role}` : ''}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch pending users');
+  }
+
+  return response.json();
+};
+
+export const adminValidateVolunteer = async (data: {
+  username: string;
+  validated: boolean;
+  accreditation?: string;
+  affectation?: string;
+}) => {
+  const response = await fetch('/api/admin/validate-volunteer', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to validate volunteer');
+  }
+
+  return response.json();
+};
+
+export const adminValidateOfficiel = async (data: {
+  username: string;
+  validated: boolean;
+  accreditation?: string;
+  zone_responsabilite?: string;
+  type?: string;
+}) => {
+  const response = await fetch('/api/admin/validate-official', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to validate official');
+  }
+
+  return response.json();
+};
+
+export const adminCreateAccount = async (data: {
+  username: string;
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  additionalData: any;
+}) => {
+  const response = await fetch('/api/admin/create-account', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to create account');
+  }
+
+  return response.json();
+};
