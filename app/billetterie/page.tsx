@@ -1,5 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import { listTickets, createTicket } from '../../src/api/ticketService';
+import eventsApi from '../../src/api/eventsService';
 import QRCode from 'react-qr-code';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -47,93 +49,9 @@ interface TicketCategory {
   available: number;
 }
 
-// Données simulées pour la démonstration
-const mockTickets: Ticket[] = [
-  {
-    id: 'TICKET-001',
-    eventId: 'EVENT-001',
-    eventName: 'Finales de Natation - Jour 1',
-    competitionName: '100m Nage Libre Hommes',
-    date: '2024-07-25',
-    time: '14:00',
-    venue: 'Stade Nautique Olympique',
-    seat: 'A-15',
-    category: 'premium',
-    price: 75,
-    purchaseDate: '2024-07-15',
-    status: 'valid',
-    qrCode: 'TICKET-001-USER-123-20240725'
-  },
-  {
-    id: 'TICKET-002',
-    eventId: 'EVENT-002',
-    eventName: 'Compétition d\'Athlétisme',
-    competitionName: 'Saut en Hauteur Femmes',
-    date: '2024-07-26',
-    time: '10:30',
-    venue: 'Stade Olympique',
-    seat: 'B-22',
-    category: 'standard',
-    price: 45,
-    purchaseDate: '2024-07-10',
-    status: 'valid',
-    qrCode: 'TICKET-002-USER-123-20240726'
-  },
-  {
-    id: 'TICKET-003',
-    eventId: 'EVENT-003',
-    eventName: 'Finales de Cyclisme',
-    competitionName: 'Course sur Piste - Sprint',
-    date: '2024-07-24',
-    time: '16:00',
-    venue: 'Vélodrome National',
-    seat: 'VIP-03',
-    category: 'vip',
-    price: 120,
-    purchaseDate: '2024-07-05',
-    status: 'used',
-    qrCode: 'TICKET-003-USER-123-20240724'
-  }
-];
-
-const mockEvents: Event[] = [
-  {
-    id: 'EVENT-004',
-    name: 'Épreuves de Triathlon',
-    date: '2024-07-28',
-    time: '08:00',
-    venue: 'Parc Triathlon',
-    ticketsAvailable: 150,
-    ticketPrice: 60,
-    categories: [
-      { type: 'standard', price: 60, benefits: ['Accès standard', 'Siège numéroté'], available: 100 },
-      { type: 'premium', price: 90, benefits: ['Accès prioritaire', 'Siège premium', 'Rafraîchissement offert'], available: 40 },
-      { type: 'vip', price: 150, benefits: ['Accès VIP', 'Parking réservé', 'Buffet', 'Rencontre avec les athlètes'], available: 10 }
-    ],
-    competitions: [
-      { id: 'COMP-001', name: 'Triathlon Hommes', type: 'Triathlon', athletes: ['Martin Dubois', 'Jean Leroy'], startTime: '08:30' },
-      { id: 'COMP-002', name: 'Triathlon Femmes', type: 'Triathlon', athletes: ['Sophie Martin', 'Marie Dubois'], startTime: '11:00' }
-    ]
-  },
-  {
-    id: 'EVENT-005',
-    name: 'Finales de Gymnastique',
-    date: '2024-07-29',
-    time: '19:30',
-    venue: 'Palais des Sports',
-    ticketsAvailable: 80,
-    ticketPrice: 85,
-    categories: [
-      { type: 'standard', price: 85, benefits: ['Accès standard', 'Siège numéroté'], available: 50 },
-      { type: 'premium', price: 130, benefits: ['Accès prioritaire', 'Siège premium', 'Programme officiel'], available: 25 },
-      { type: 'vip', price: 200, benefits: ['Accès VIP', 'Rencontre exclusive', 'Photos avec les gymnastes'], available: 5 }
-    ],
-    competitions: [
-      { id: 'COMP-003', name: 'Barres Parallèles Hommes', type: 'Gymnastique', athletes: ['Thomas Bernard', 'Alexandre Petit'], startTime: '20:00' },
-      { id: 'COMP-004', name: 'Poutre Femmes', type: 'Gymnastique', athletes: ['Camille Laurent', 'Élodie Moreau'], startTime: '21:30' }
-    ]
-  }
-];
+// Initial empty states; real data will be loaded from the billetterie microservice
+const mockTickets: Ticket[] = [];
+const mockEvents: Event[] = [];
 
 export default function TicketPage() {
   const [tickets, setTickets] = useState<Ticket[]>(mockTickets);
@@ -146,21 +64,77 @@ export default function TicketPage() {
   const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
   const [showScanner, setShowScanner] = useState(false);
 
-  // Simuler le chargement des données
+  // Charger les tickets et événements depuis les services billetterie/events
   useEffect(() => {
-    // Ici, vous feriez normalement des appels API
-    // setTickets(await getUserTickets());
-    // setEvents(await getAvailableEvents());
+    async function fetchData() {
+      try {
+        const t = await listTickets();
+        const ticketsData = Array.isArray(t) ? t : (t?.content ?? []);
+        setTickets(ticketsData as Ticket[]);
+      } catch (e) {
+        console.error('Échec chargement tickets', e);
+      }
+
+      try {
+        const ev = await eventsApi.getEvents();
+        setEvents(Array.isArray(ev) ? ev : (ev?.content ?? mockEvents));
+      } catch (e) {
+        console.error('Échec chargement events', e);
+      }
+    }
+
+    fetchData();
   }, []);
 
-  const handlePurchase = (eventId: string) => {
+  const handlePurchase = async (eventId: string) => {
     setLoading(true);
-    
-    // Simuler un appel API
-    setTimeout(() => {
+    // Try real API call first
+    try {
+      const payload = { eventId, quantity, category: selectedCategory };
+      const created = await createTicket(payload);
+
+      // Normalize created ticket (API may return different shape)
+      const event = events.find((e) => e.id === eventId);
+      const newTicket: Ticket = created && created.id ? (created as Ticket) : {
+        id: created?.ticketId || `TICKET-${Date.now().toString().slice(-6)}`,
+        eventId,
+        eventName: event?.name || '',
+        competitionName: event?.competitions[0]?.name || 'Compétition principale',
+        date: event?.date || new Date().toISOString().split('T')[0],
+        time: event?.time || '',
+        venue: event?.venue || '',
+        seat: created?.seat || `${String.fromCharCode(65 + Math.floor(Math.random() * 10))}-${Math.floor(Math.random() * 50) + 1}`,
+        category: selectedCategory,
+        price: created?.price ?? calculateTotal(eventId, quantity),
+        purchaseDate: created?.purchaseDate ?? new Date().toISOString().split('T')[0],
+        status: created?.status ?? 'valid',
+        qrCode: created?.qrCode ?? `TICKET-${Date.now()}-USER-${Math.random().toString(36).substr(2, 9)}`
+      };
+
+      setTickets([newTicket, ...tickets]);
+      setPurchaseSuccess(`Votre billet pour "${newTicket.eventName}" a été acheté avec succès !`);
+      setActiveTab('my-tickets');
+
+      // Mettre à jour la disponibilité localement
+      setEvents(events.map(e => {
+        if (e.id === eventId) {
+          const updatedCategories = e.categories.map(c => {
+            if (c.type === selectedCategory) {
+              return { ...c, available: Math.max(0, c.available - quantity) };
+            }
+            return c;
+          });
+          const totalAvailable = updatedCategories.reduce((sum, c) => sum + c.available, 0);
+          return { ...e, categories: updatedCategories, ticketsAvailable: totalAvailable };
+        }
+        return e;
+      }));
+    } catch (err) {
+      console.error('Erreur lors de la création du billet, fallback en simulation', err);
+      // Fallback: comportement simulé si l'API échoue
       const event = events.find(e => e.id === eventId);
       const category = event?.categories.find(c => c.type === selectedCategory);
-      
+
       if (event && category) {
         const newTicket: Ticket = {
           id: `TICKET-${Date.now().toString().slice(-6)}`,
@@ -177,12 +151,11 @@ export default function TicketPage() {
           status: 'valid',
           qrCode: `TICKET-${Date.now()}-USER-${Math.random().toString(36).substr(2, 9)}`
         };
-        
+
         setTickets([newTicket, ...tickets]);
         setPurchaseSuccess(`Votre billet pour "${event.name}" a été acheté avec succès !`);
         setActiveTab('my-tickets');
-        
-        // Mettre à jour la disponibilité
+
         setEvents(events.map(e => {
           if (e.id === eventId) {
             const updatedCategories = e.categories.map(c => {
@@ -191,21 +164,15 @@ export default function TicketPage() {
               }
               return c;
             });
-            
             const totalAvailable = updatedCategories.reduce((sum, c) => sum + c.available, 0);
-            
-            return {
-              ...e,
-              categories: updatedCategories,
-              ticketsAvailable: totalAvailable
-            };
+            return { ...e, categories: updatedCategories, ticketsAvailable: totalAvailable };
           }
           return e;
         }));
       }
-      
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   const getCategoryColor = (category: Ticket['category']) => {

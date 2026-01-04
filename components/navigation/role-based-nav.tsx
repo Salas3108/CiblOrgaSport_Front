@@ -32,7 +32,7 @@ const navigationItems: NavItem[] = [
   },
   {
     label: "Events",
-    href: "/events",
+    href: "/AdminEvents",
     icon: Calendar,
     roles: ["admin", "official", "athlete", "spectator", "volunteer"]
   },
@@ -93,7 +93,7 @@ export function RoleBasedNav() {
     return (
       <nav className="hidden md:flex items-center space-x-6">
         <Button variant="ghost" size="sm" className="flex items-center space-x-2" asChild>
-          <Link href="/events">
+          <Link href="/AdminEvents">
             <Calendar className="h-4 w-4" />
             <span>Events</span>
           </Link>
@@ -115,8 +115,31 @@ export function RoleBasedNav() {
   }
 
   const userRole = user.role
-  const allowedItems = navigationItems.filter(item => 
-    item.roles.includes(userRole) || item.roles.includes("all")
+  // Normalize role: accept backend enum (USER, ADMIN, VOLONTAIRE...) or UI keys
+  const BACKEND_TO_UI_ROLE: Record<string, string> = {
+    USER: "spectator",
+    ROLE_USER: "spectator",
+    ATHLETE: "athlete",
+    ROLE_ATHLETE: "athlete",
+    ADMIN: "admin",
+    ROLE_ADMIN: "admin",
+    COMMISSAIRE: "commissaire",
+    ROLE_COMMISSAIRE: "commissaire",
+    VOLONTAIRE: "volunteer",
+    ROLE_VOLONTAIRE: "volunteer",
+  }
+
+  const rawRole = (userRole || "").toString()
+  let normalizedRole = rawRole
+  const upper = rawRole.toUpperCase()
+  if (BACKEND_TO_UI_ROLE[upper]) {
+    normalizedRole = BACKEND_TO_UI_ROLE[upper]
+  } else {
+    normalizedRole = rawRole.toLowerCase()
+  }
+
+  const allowedItems = navigationItems.filter((item) =>
+    item.roles.includes(normalizedRole) || item.roles.includes("all")
   )
 
   return (

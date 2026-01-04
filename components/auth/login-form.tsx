@@ -13,8 +13,28 @@ import { useRouter } from "next/navigation"
 import { logout } from "@/utils/auth"
 import { assertApiBaseUrlOrThrow } from "@/utils/env"
 import Link from "next/link"
+import { useAuth } from "@/components/auth/auth-provider"
 
-const DEFAULT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8081"
+// try to decode a JWT payload in browser
+function decodeJwtPayload(token: string | null) {
+  if (!token) return null
+  try {
+    const parts = token.split('.')
+    if (parts.length < 2) return null
+    const payload = parts[1]
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+    const json = decodeURIComponent(atob(payload).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+    }).join(''))
+    return JSON.parse(json)
+  } catch (e) {
+    return null
+  }
+}
+
+// Prefer gateway so browser calls go through proxy and avoid CORS issues
+const DEFAULT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
 const getApiBaseUrl = (): string => {
   try {
     const url = assertApiBaseUrlOrThrow()
@@ -27,10 +47,15 @@ const getApiBaseUrl = (): string => {
 // Backend enum roles -> UI role keys
 const BACKEND_TO_UI_ROLE: Record<string, string> = {
   USER: "spectator",
+  ROLE_USER: "spectator",
   ATHLETE: "athlete",
+  ROLE_ATHLETE: "athlete",
   ADMIN: "admin",
+  ROLE_ADMIN: "admin",
   COMMISSAIRE: "commissaire",
+  ROLE_COMMISSAIRE: "commissaire",
   VOLONTAIRE: "volunteer",
+  ROLE_VOLONTAIRE: "volunteer",
 }
 
 // Single source of truth for redirects based on UI role keys
@@ -56,6 +81,7 @@ export function LoginForm() {
     typeof window !== "undefined" &&
     !!localStorage.getItem("token") &&
     !!localStorage.getItem("user")
+  const { login } = useAuth()
 
   const devLog = (...args: any[]) => {
     if (process.env.NODE_ENV === "development") {
@@ -74,7 +100,7 @@ export function LoginForm() {
       setApiBaseUrl(null)
       setError(
         e?.message ||
-          'URL de base API manquante. Créez ".env.local" avec NEXT_PUBLIC_API_BASE_URL ou l’application utilisera "http://localhost:8081". Redémarrez le serveur de dev.'
+          'URL de base API manquante. Créez ".env.local" avec NEXT_PUBLIC_API_BASE_URL ou l’application utilisera "http://localhost:8080". Redémarrez le serveur de dev.'
       )
       devLog("[LoginForm] API base URL error:", e)
     }
@@ -124,20 +150,56 @@ export function LoginForm() {
       }
       devLog("[LoginForm] Parsed response:", { tokenPreview: token?.slice(0, 8) + "...", user })
 
-      const backendRole = (user?.role || "").toString().trim().toUpperCase()
-      const uiRole = BACKEND_TO_UI_ROLE[backendRole] || ""
-      localStorage.setItem(
-        "user",
-        JSON.stringify({
+      let backendRole = (user?.role || "").toString().trim().toUpperCase()
+      let uiRole = BACKEND_TO_UI_ROLE[backendRole] || ""
+
+      // If backend didn't provide role, try to extract from token claims
+      if (!uiRole && token) {
+        const payload = decodeJwtPayload(token)
+        if (payload) {
+          // common claim names
+          const candidates = [] as string[]
+          if (payload.role) candidates.push(String(payload.role))
+          if (payload.roles && Array.isArray(payload.roles)) candidates.push(...payload.roles.map(String))
+          if (payload.authorities && Array.isArray(payload.authorities)) candidates.push(...payload.authorities.map(String))
+          if (payload.realm_access && Array.isArray(payload.realm_access.roles)) candidates.push(...payload.realm_access.roles.map(String))
+          if (payload.realm_access && payload.realm_access.roles) candidates.push(...payload.realm_access.roles.map(String))
+          if (candidates.length) {
+            const found = candidates.map(c => c.toUpperCase()).find(c => BACKEND_TO_UI_ROLE[c])
+            if (found) {
+              backendRole = found
+              uiRole = BACKEND_TO_UI_ROLE[found]
+            }
+          }
+        }
+      }
+
+      // Use AuthProvider.login so the context updates immediately
+      try {
+        login({
           username: user?.username || formData.username,
           email: user?.email || "",
-          role: backendRole, // store raw backend enum
-          uiRole, // store derived UI role for convenience
+          role: backendRole,
+          uiRole,
           name: user?.username || formData.username,
           authenticated: true,
           type: type || "Bearer",
         })
-      )
+      } catch (e) {
+        // fallback: persist directly
+        localStorage.setItem(
+          "user",
+          JSON.stringify({
+            username: user?.username || formData.username,
+            email: user?.email || "",
+            role: backendRole,
+            uiRole,
+            name: user?.username || formData.username,
+            authenticated: true,
+            type: type || "Bearer",
+          })
+        )
+      }
       localStorage.setItem("token", token)
 
       const target = ROLE_REDIRECTS[uiRole] || "/"
@@ -178,8 +240,8 @@ export function LoginForm() {
             </span>
           ) : (
             <span className="block mt-2 text-xs text-red-600">
-              NEXT_PUBLIC_API_BASE_URL est manquant dans .env.local. Utilisation de "http://localhost:8081". Exemple :
-              NEXT_PUBLIC_API_BASE_URL="http://localhost:8081". Après l’ajout, redémarrez : "npm run dev".
+              NEXT_PUBLIC_API_BASE_URL est manquant dans .env.local. Utilisation de "http://localhost:8080". Exemple :
+              NEXT_PUBLIC_API_BASE_URL="http://localhost:8080". Après l’ajout, redémarrez : "npm run dev".
             </span>
           )}
           <span className="block mt-2 text-xs text-muted-foreground">

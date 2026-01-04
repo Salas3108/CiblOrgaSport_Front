@@ -42,7 +42,8 @@ export default function ProfilePage() {
     setError(null)
     
     try {
-      const authBase = "http://localhost:8081"
+      // Use gateway for auth requests to avoid CORS issues
+      const authBase = "http://localhost:8080"
 
       const getUsernameFromToken = (jwt?: string | null): string | undefined => {
         if (!jwt) return undefined

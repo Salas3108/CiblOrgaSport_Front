@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Menu, User, Calendar, Trophy, MapPin, LogOut } from "lucide-react"
 import { useAuth } from "@/components/auth/auth-provider"
 import { NotificationCenter } from "@/components/notifications/notification-center"
+import { RoleBasedNav } from "@/components/navigation/role-based-nav"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,24 +31,7 @@ export function Header() {
           </div>
         </div>
 
-        <nav className="hidden md:flex items-center space-x-6">
-          <Button variant="ghost" size="sm" className="flex items-center space-x-2">
-            <Calendar className="h-4 w-4" />
-            <span>Events</span>
-          </Button>
-          <Button variant="ghost" size="sm" className="flex items-center space-x-2" asChild>
-            <a href="/results">
-              <Trophy className="h-4 w-4" />
-              <span>Results</span>
-            </a>
-          </Button>
-          <Button variant="ghost" size="sm" className="flex items-center space-x-2" asChild>
-            <a href="/venues">
-              <MapPin className="h-4 w-4" />
-              <span>Venues</span>
-            </a>
-          </Button>
-        </nav>
+        <RoleBasedNav />
 
         <div className="flex items-center space-x-4">
           {isAuthenticated && <NotificationCenter />}

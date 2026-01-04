@@ -2,7 +2,8 @@ import axios from 'axios';
 
 // Bases read from environment to remove hardcoded URLs:
 export const apiBases = {
-  auth: 'http://localhost:8081',
+  // Use the gateway for auth so browser requests go through the API gateway (CORS handled by gateway)
+  auth: 'http://localhost:8080',
   events: 'http://localhost:8080',
   incidents: 'http://localhost:8084',
   billetterie: 'http://localhost:8083',
@@ -15,7 +16,7 @@ export const http = axios.create({
 
 // Attach JWT from localStorage on each request
 http.interceptors.request.use((config) => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('jwt') : null;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
   // Ensure headers is an AxiosHeaders instance to satisfy TS types
   const AxiosHeadersCtor = (axios as any).AxiosHeaders;
