@@ -101,11 +101,32 @@ export function AuthProvider({ children }: Props) {
         // ensure stored form is consistent: persist a normalized version (keep raw keys too)
         try {
           const parsed = JSON.parse(storedUser)
-          const toStore = {
+          const toStore: any = {
             ...parsed,
             role: parsed.role ?? parsed.uiRole ?? normalized.role,
             uiRole: parsed.uiRole ?? normalized.role,
             authenticated: true,
+          }
+          // attempt to persist an id-like candidate so other parts of the app can read it
+          const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+          const idCandidate = parsed.id ?? parsed.userId ?? parsed.spectatorId ?? parsed.sub
+          if (!idCandidate && token) {
+            try {
+              const parts = token.split('.')
+              if (parts.length >= 2) {
+                const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+                const json = decodeURIComponent(atob(payload).split('').map(function(c:any) {
+                  return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+                }).join(''))
+                const p = JSON.parse(json)
+                const extracted = p.sub ?? p.id ?? p.userId ?? p.spectatorId
+                if (extracted) toStore.id = extracted
+              }
+            } catch (e) {
+              // ignore
+            }
+          } else if (idCandidate) {
+            toStore.id = idCandidate
           }
           localStorage.setItem("user", JSON.stringify(toStore))
         } catch (e) {
@@ -128,7 +149,29 @@ export function AuthProvider({ children }: Props) {
     }
     setUser(normalized)
     // persist original plus uiRole for future consistency
-    const toStore = { ...(parsed || {}), role: parsed.role ?? normalized.role, uiRole: normalized.role, authenticated: true }
+    const toStore: any = { ...(parsed || {}), role: parsed.role ?? normalized.role, uiRole: normalized.role, authenticated: true }
+    // ensure we persist an id candidate if available (from parsed or token)
+    const idCandidate = parsed.id ?? parsed.userId ?? parsed.spectatorId ?? parsed.sub
+    if (idCandidate) toStore.id = idCandidate
+    else {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+      if (token) {
+        try {
+          const parts = token.split('.')
+          if (parts.length >= 2) {
+            const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+            const json = decodeURIComponent(atob(payload).split('').map(function(c:any) {
+              return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+            }).join(''))
+            const p = JSON.parse(json)
+            const extracted = p.sub ?? p.id ?? p.userId ?? p.spectatorId
+            if (extracted) toStore.id = extracted
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
     localStorage.setItem("user", JSON.stringify(toStore))
   }
 

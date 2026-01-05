@@ -1,181 +1,217 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { listTickets, createTicket } from '../../src/api/ticketService';
+import { listTickets, createTicket, deleteTicket } from '../../src/api/ticketService';
 import eventsApi from '../../src/api/eventsService';
+import { authRepo } from '../../lib/services/auth-service';
 import QRCode from 'react-qr-code';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { useAuth } from '../../components/auth/auth-provider';
 
 interface Ticket {
-  id: string;
-  eventId: string;
-  eventName: string;
-  competitionName: string;
-  date: string;
-  time: string;
-  venue: string;
-  seat: string;
-  category: 'standard' | 'premium' | 'vip';
-  price: number;
-  purchaseDate: string;
-  status: 'valid' | 'used' | 'cancelled';
-  qrCode: string;
+  id: number;
+  category: string;
+  basePrice: number;
+  spectatorId: number;
+  epreuveId: number;
+  spectator?: any;
+  event?: any;
 }
 
-interface Event {
-  id: string;
-  name: string;
-  date: string;
-  time: string;
-  venue: string;
-  competitions: Competition[];
-  ticketsAvailable: number;
-  ticketPrice: number;
-  categories: TicketCategory[];
+interface Epreuve {
+  id: number;
+  nom: string;
+  description: string;
+  date?: string;
+  competition?: any;
 }
 
-interface Competition {
-  id: string;
-  name: string;
-  type: string;
-  athletes: string[];
-  startTime: string;
-}
+export default function BilletteriePage() {
+  const { user } = useAuth();
 
-interface TicketCategory {
-  type: 'standard' | 'premium' | 'vip';
-  price: number;
-  benefits: string[];
-  available: number;
-}
-
-// Initial empty states; real data will be loaded from the billetterie microservice
-const mockTickets: Ticket[] = [];
-const mockEvents: Event[] = [];
-
-export default function TicketPage() {
-  const [tickets, setTickets] = useState<Ticket[]>(mockTickets);
-  const [events, setEvents] = useState<Event[]>(mockEvents);
-  const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<'standard' | 'premium' | 'vip'>('standard');
-  const [quantity, setQuantity] = useState(1);
-  const [activeTab, setActiveTab] = useState<'my-tickets' | 'buy-tickets'>('my-tickets');
-  const [loading, setLoading] = useState(false);
-  const [purchaseSuccess, setPurchaseSuccess] = useState<string | null>(null);
-  const [showScanner, setShowScanner] = useState(false);
-
-  // Charger les tickets et événements depuis les services billetterie/events
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const t = await listTickets();
-        const ticketsData = Array.isArray(t) ? t : (t?.content ?? []);
-        setTickets(ticketsData as Ticket[]);
-      } catch (e) {
-        console.error('Échec chargement tickets', e);
+  // Try to determine the spectator id from stored user or token
+  const getSpectatorId = async (): Promise<number | null> => {
+    try {
+      if (typeof window === 'undefined') return null;
+      const raw = localStorage.getItem('user');
+      let usernameCandidate: string | undefined
+      if (raw) {
+        const p = JSON.parse(raw);
+        const cand = p.spectatorId ?? p.spectator?.id ?? p.id ?? p.userId ?? p.sub;
+        if (cand != null) {
+          const n = Number(cand);
+          if (!Number.isNaN(n)) return n;
+          // remember username to try resolving server-side
+          usernameCandidate = String(cand);
+        }
+        // also capture username fields
+        usernameCandidate = usernameCandidate || p.username || p.name || undefined;
       }
 
-      try {
-        const ev = await eventsApi.getEvents();
-        setEvents(Array.isArray(ev) ? ev : (ev?.content ?? mockEvents));
-      } catch (e) {
-        console.error('Échec chargement events', e);
+      const token = localStorage.getItem('token');
+      if (token) {
+        const parts = token.split('.');
+        if (parts.length >= 2) {
+          try {
+            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+            const cand = payload.spectatorId ?? payload.id ?? payload.userId ?? payload.sub;
+            if (cand != null) {
+              const n = Number(cand);
+              if (!Number.isNaN(n)) return n;
+              usernameCandidate = usernameCandidate || String(cand);
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
       }
+
+      // Try to fetch authenticated user's numeric id via /auth/me
+      const storedToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+      if (storedToken) {
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
+          const res = await fetch(`${baseUrl}/auth/me`, {
+            headers: {
+              'Authorization': `Bearer ${storedToken}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          if (res.ok) {
+            const data = await res.json()
+            if (data.id) {
+              const n = Number(data.id)
+              if (!Number.isNaN(n)) return n
+            }
+          }
+        } catch (e) {
+          // ignore network errors
+        }
+      }
+    } catch (e) {
+      // ignore parsing errors
     }
+    return null;
+  };
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [epreuves, setEpreuves] = useState<Epreuve[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'my-tickets' | 'register'>('my-tickets');
+  const [scannerActive, setScannerActive] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    fetchData();
+  // Formulaire d'enregistrement
+  const [ticketForm, setTicketForm] = useState({
+    epreuveId: '',
+    category: 'standard',
+    basePrice: '50'
+  });
+
+  useEffect(() => {
+    loadData();
   }, []);
 
-  const handlePurchase = async (eventId: string) => {
+  const loadData = async () => {
     setLoading(true);
-    // Try real API call first
     try {
-      const payload = { eventId, quantity, category: selectedCategory };
-      const created = await createTicket(payload);
+      // Charger les tickets de l'utilisateur connecté
+      const spectatorId = await getSpectatorId();
+      const params = spectatorId ? { spectatorId } : {};
+      const ticketsData = await listTickets(params as any);
+      setTickets(Array.isArray(ticketsData) ? ticketsData : []);
 
-      // Normalize created ticket (API may return different shape)
-      const event = events.find((e) => e.id === eventId);
-      const newTicket: Ticket = created && created.id ? (created as Ticket) : {
-        id: created?.ticketId || `TICKET-${Date.now().toString().slice(-6)}`,
-        eventId,
-        eventName: event?.name || '',
-        competitionName: event?.competitions[0]?.name || 'Compétition principale',
-        date: event?.date || new Date().toISOString().split('T')[0],
-        time: event?.time || '',
-        venue: event?.venue || '',
-        seat: created?.seat || `${String.fromCharCode(65 + Math.floor(Math.random() * 10))}-${Math.floor(Math.random() * 50) + 1}`,
-        category: selectedCategory,
-        price: created?.price ?? calculateTotal(eventId, quantity),
-        purchaseDate: created?.purchaseDate ?? new Date().toISOString().split('T')[0],
-        status: created?.status ?? 'valid',
-        qrCode: created?.qrCode ?? `TICKET-${Date.now()}-USER-${Math.random().toString(36).substr(2, 9)}`
-      };
-
-      setTickets([newTicket, ...tickets]);
-      setPurchaseSuccess(`Votre billet pour "${newTicket.eventName}" a été acheté avec succès !`);
-      setActiveTab('my-tickets');
-
-      // Mettre à jour la disponibilité localement
-      setEvents(events.map(e => {
-        if (e.id === eventId) {
-          const updatedCategories = e.categories.map(c => {
-            if (c.type === selectedCategory) {
-              return { ...c, available: Math.max(0, c.available - quantity) };
-            }
-            return c;
-          });
-          const totalAvailable = updatedCategories.reduce((sum, c) => sum + c.available, 0);
-          return { ...e, categories: updatedCategories, ticketsAvailable: totalAvailable };
-        }
-        return e;
-      }));
-    } catch (err) {
-      console.error('Erreur lors de la création du billet, fallback en simulation', err);
-      // Fallback: comportement simulé si l'API échoue
-      const event = events.find(e => e.id === eventId);
-      const category = event?.categories.find(c => c.type === selectedCategory);
-
-      if (event && category) {
-        const newTicket: Ticket = {
-          id: `TICKET-${Date.now().toString().slice(-6)}`,
-          eventId: event.id,
-          eventName: event.name,
-          competitionName: event.competitions[0]?.name || 'Compétition principale',
-          date: event.date,
-          time: event.time,
-          venue: event.venue,
-          seat: `${String.fromCharCode(65 + Math.floor(Math.random() * 10))}-${Math.floor(Math.random() * 50) + 1}`,
-          category: selectedCategory,
-          price: category.price * quantity,
-          purchaseDate: new Date().toISOString().split('T')[0],
-          status: 'valid',
-          qrCode: `TICKET-${Date.now()}-USER-${Math.random().toString(36).substr(2, 9)}`
-        };
-
-        setTickets([newTicket, ...tickets]);
-        setPurchaseSuccess(`Votre billet pour "${event.name}" a été acheté avec succès !`);
-        setActiveTab('my-tickets');
-
-        setEvents(events.map(e => {
-          if (e.id === eventId) {
-            const updatedCategories = e.categories.map(c => {
-              if (c.type === selectedCategory) {
-                return { ...c, available: Math.max(0, c.available - quantity) };
-              }
-              return c;
-            });
-            const totalAvailable = updatedCategories.reduce((sum, c) => sum + c.available, 0);
-            return { ...e, categories: updatedCategories, ticketsAvailable: totalAvailable };
-          }
-          return e;
-        }));
-      }
+      // Charger les épreuves disponibles
+      const epreuvesData = await eventsApi.getEpreuves();
+      setEpreuves(Array.isArray(epreuvesData) ? epreuvesData : []);
+    } catch (error) {
+      console.error('Erreur lors du chargement des données:', error);
+      setErrorMessage('Erreur lors du chargement des données');
     } finally {
       setLoading(false);
     }
   };
 
-  const getCategoryColor = (category: Ticket['category']) => {
+  const handleRegisterTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    const spectatorId = await getSpectatorId();
+    if (!spectatorId) {
+      setErrorMessage('Vous devez être connecté pour enregistrer un billet');
+      return;
+    }
+
+    try {
+      const payload = {
+        epreuveId: parseInt(ticketForm.epreuveId),
+        category: ticketForm.category,
+        basePrice: parseFloat(ticketForm.basePrice),
+        spectatorId
+      };
+
+      console.log('Payload envoyé:', payload);
+      await createTicket(payload);
+      setSuccessMessage('Billet enregistré avec succès !');
+      setTicketForm({ epreuveId: '', category: 'standard', basePrice: '50' });
+      loadData();
+      setTimeout(() => setActiveTab('my-tickets'), 2000);
+    } catch (error: any) {
+      console.error('Erreur lors de l\'enregistrement:', error);
+      setErrorMessage(error.message || 'Erreur lors de l\'enregistrement du billet');
+    }
+  };
+
+  const handleDeleteTicket = async (id: number) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce billet ?')) return;
+    
+    try {
+      await deleteTicket(id);
+      setSuccessMessage('Billet supprimé avec succès');
+      loadData();
+    } catch (error: any) {
+      console.error('Erreur suppression billet:', error);
+      setErrorMessage(error.message || 'Erreur lors de la suppression du billet');
+    }
+
+  };
+
+  const handleScanQRCode = async (qrData: string) => {
+    const spectatorId = await getSpectatorId();
+    if (!spectatorId) {
+      setErrorMessage('Vous devez être connecté pour enregistrer un billet');
+      return;
+    }
+
+    try {
+      // Parser les données QR (format attendu: JSON avec epreuveId, category, basePrice)
+      const data = JSON.parse(qrData);
+      
+      const payload = {
+        epreuveId: data.epreuveId,
+        category: data.category || 'standard',
+        basePrice: data.basePrice || 50,
+        spectatorId
+      };
+
+      await createTicket(payload);
+      setSuccessMessage('Billet scanné et enregistré avec succès !');
+      setScannerActive(false);
+      loadData();
+      setTimeout(() => setActiveTab('my-tickets'), 2000);
+    } catch (error: any) {
+      setErrorMessage('Erreur lors du scan: ' + error.message);
+    }
+  };
+
+  const getCategoryLabel = (category: string) => {
+    switch (category) {
+      case 'standard': return 'Standard';
+      case 'premium': return 'Premium';
+      case 'vip': return 'VIP';
+      default: return category;
+    }
+  };
+
+  const getCategoryColor = (category: string) => {
     switch (category) {
       case 'standard': return 'bg-gray-100 text-gray-800';
       case 'premium': return 'bg-blue-100 text-blue-800';
@@ -184,439 +220,324 @@ export default function TicketPage() {
     }
   };
 
-  const getStatusColor = (status: Ticket['status']) => {
-    switch (status) {
-      case 'valid': return 'bg-green-100 text-green-800';
-      case 'used': return 'bg-gray-100 text-gray-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return format(date, 'EEEE d MMMM yyyy', { locale: fr });
-  };
-
-  const calculateTotal = (eventId: string, quantity: number) => {
-    const event = events.find(e => e.id === eventId);
-    const category = event?.categories.find(c => c.type === selectedCategory);
-    return category ? category.price * quantity : 0;
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-gray-600">Chargement...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6">
-      {/* Header */}
-      <div className="border-b border-gray-200 pb-6 mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Billetterie</h1>
-            <p className="mt-2 text-gray-600">Gérez vos billets et achetez pour les prochaines compétitions</p>
-          </div>
-          <div className="mt-4 sm:mt-0">
-            <button
-              onClick={() => setShowScanner(true)}
-              className="px-4 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-            >
-              Scanner un billet
-            </button>
-          </div>
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Billetterie</h1>
+          <p className="mt-2 text-gray-600">Gérez vos billets d'événements sportifs</p>
         </div>
-      </div>
 
-      {purchaseSuccess && (
-        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+        {/* Messages */}
+        {successMessage && (
+          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-green-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
+              <p className="text-green-800">{successMessage}</p>
             </div>
-            <div className="ml-3">
-              <p className="text-sm text-green-700">{purchaseSuccess}</p>
-            </div>
-            <button
-              onClick={() => setPurchaseSuccess(null)}
-              className="ml-auto pl-3"
-            >
-              <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-red-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Scanner Modal */}
-      {showScanner && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">Scanner un billet</h3>
-                <button
-                  onClick={() => setShowScanner(false)}
-                  className="text-gray-400 hover:text-gray-500"
-                >
-                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              
-              <div className="text-center mb-6">
-                <div className="mx-auto w-64 h-64 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-                  <div className="text-center">
-                    <svg className="w-16 h-16 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                    </svg>
-                    <p className="text-gray-500">Simulation de scanner QR Code</p>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600">
-                  Positionnez le code QR de votre billet dans le cadre pour le scanner
-                </p>
-              </div>
-              
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setShowScanner(false)}
-                  className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium"
-                >
-                  Fermer
-                </button>
-              </div>
+              <p className="text-red-800">{errorMessage}</p>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Tabs */}
-      <div className="mb-8">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            <button
-              onClick={() => setActiveTab('my-tickets')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'my-tickets'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <span className="flex items-center">
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-                </svg>
-                Mes billets ({tickets.filter(t => t.status === 'valid').length} valides)
-              </span>
-            </button>
-            <button
-              onClick={() => setActiveTab('buy-tickets')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'buy-tickets'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <span className="flex items-center">
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                Acheter des billets
-              </span>
-            </button>
-          </nav>
-        </div>
-      </div>
-
-      {/* My Tickets Tab */}
-      {activeTab === 'my-tickets' && (
-        <div>
-          {tickets.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
-                </svg>
-              </div>
-              <h4 className="text-lg font-medium text-gray-900 mb-2">Vous n'avez pas encore de billets</h4>
-              <p className="text-gray-500 max-w-sm mx-auto mb-6">
-                Achetez votre premier billet pour assister aux compétitions
-              </p>
+        {/* Tabs */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+          <div className="border-b border-gray-200">
+            <nav className="flex -mb-px">
               <button
-                onClick={() => setActiveTab('buy-tickets')}
-                className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                onClick={() => setActiveTab('my-tickets')}
+                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'my-tickets'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
               >
-                Acheter un billet
+                <span className="flex items-center">
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                  </svg>
+                  Mes Billets ({tickets.length})
+                </span>
               </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {tickets.map((ticket) => (
-                <div key={ticket.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                  <div className="p-6">
-                    <div className="flex justify-between items-start mb-6">
-                      <div>
-                        <h3 className="text-xl font-semibold text-gray-900 mb-2">{ticket.eventName}</h3>
-                        <p className="text-gray-600">{ticket.competitionName}</p>
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(ticket.status)}`}>
-                        {ticket.status === 'valid' ? 'Valide' : ticket.status === 'used' ? 'Utilisé' : 'Annulé'}
-                      </span>
+              <button
+                onClick={() => setActiveTab('register')}
+                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'register'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <span className="flex items-center">
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Enregistrer un Billet
+                </span>
+              </button>
+            </nav>
+          </div>
+
+          <div className="p-6">
+            {/* Mes Billets Tab */}
+            {activeTab === 'my-tickets' && (
+              <div>
+                {tickets.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                      <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                      </svg>
                     </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                      <div>
-                        <p className="text-sm font-medium text-gray-500 mb-1">Date et heure</p>
-                        <p className="text-gray-900">{formatDate(ticket.date)} à {ticket.time}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-500 mb-1">Lieu</p>
-                        <p className="text-gray-900">{ticket.venue}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-500 mb-1">Siège</p>
-                        <p className="text-gray-900">{ticket.seat}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-500 mb-1">Catégorie</p>
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getCategoryColor(ticket.category)}`}>
-                          {ticket.category === 'standard' ? 'Standard' : ticket.category === 'premium' ? 'Premium' : 'VIP'}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="border-t border-gray-200 pt-6">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <p className="text-sm font-medium text-gray-500 mb-1">Code QR d'entrée</p>
-                          <p className="text-xs text-gray-600">À présenter à l'entrée</p>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Aucun billet</h3>
+                    <p className="text-gray-600 mb-6">Vous n'avez pas encore de billets enregistrés.</p>
+                    <button
+                      onClick={() => setActiveTab('register')}
+                      className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Enregistrer un billet
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {tickets.map((ticket) => (
+                      <div key={ticket.id} className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+                        <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-4">
+                          <div className="flex justify-between items-start mb-2">
+                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${getCategoryColor(ticket.category)}`}>
+                              {getCategoryLabel(ticket.category)}
+                            </span>
+                            <span className="text-white font-bold text-lg">{ticket.basePrice}€</span>
+                          </div>
+                          <h3 className="text-white font-semibold text-lg">
+                            {ticket.event?.nom || `Épreuve #${ticket.epreuveId}`}
+                          </h3>
+                          {ticket.event?.description && (
+                            <p className="text-blue-100 text-sm mt-1">{ticket.event.description}</p>
+                          )}
                         </div>
-                        <div className="flex items-center space-x-4">
-                          <div className="bg-white p-2 border border-gray-200 rounded-lg">
+
+                        <div className="p-4">
+                          <div className="space-y-2 mb-4">
+                            <div className="flex items-center text-sm text-gray-600">
+                              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              <span>{ticket.event?.date || 'Date à confirmer'}</span>
+                            </div>
+                            {ticket.event?.lieu && (
+                              <div className="flex items-center text-sm text-gray-600">
+                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                </svg>
+                                <span>{ticket.event.lieu.nom}</span>
+                              </div>
+                            )}
+                            <div className="flex items-center text-sm text-gray-600">
+                              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                              </svg>
+                              <span>Billet #{ticket.id}</span>
+                            </div>
+                          </div>
+
+                          {/* QR Code */}
+                          <div className="bg-white p-3 rounded-lg border border-gray-200 mb-4">
                             <QRCode
-                              value={ticket.qrCode}
-                              size={80}
-                              level="H"
-                              bgColor="#FFFFFF"
-                              fgColor="#000000"
+                              value={JSON.stringify({ ticketId: ticket.id, epreuveId: ticket.epreuveId })}
+                              size={128}
+                              className="mx-auto"
                             />
                           </div>
+
                           <button
-                            onClick={() => {
-                              // Action pour afficher le code QR en grand
-                              setSelectedEvent(ticket.eventId);
-                            }}
-                            className="px-4 py-2 text-blue-600 hover:text-blue-800 font-medium"
+                            onClick={() => handleDeleteTicket(ticket.id)}
+                            className="w-full px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
                           >
-                            Agrandir
+                            Supprimer
                           </button>
                         </div>
                       </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Enregistrer un Billet Tab */}
+            {activeTab === 'register' && (
+              <div className="max-w-2xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  {/* Formulaire d'enregistrement */}
+                  <div className="bg-white border border-gray-200 rounded-lg p-6">
+                    <div className="flex items-center mb-6">
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Formulaire</h3>
+                        <p className="text-sm text-gray-500">Remplir manuellement</p>
+                      </div>
                     </div>
-                    
-                    {ticket.status === 'valid' && (
-                      <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-                        <div className="flex items-center">
-                          <svg className="w-5 h-5 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+
+                    <form onSubmit={handleRegisterTicket} className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Épreuve *
+                        </label>
+                        <select
+                          value={ticketForm.epreuveId}
+                          onChange={(e) => setTicketForm({...ticketForm, epreuveId: e.target.value})}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          required
+                        >
+                          <option value="">Sélectionnez une épreuve</option>
+                          {epreuves.map((epreuve) => (
+                            <option key={epreuve.id} value={epreuve.id}>
+                              {epreuve.nom} {epreuve.date && `- ${epreuve.date}`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Catégorie *
+                        </label>
+                        <select
+                          value={ticketForm.category}
+                          onChange={(e) => setTicketForm({...ticketForm, category: e.target.value})}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          required
+                        >
+                          <option value="standard">Standard</option>
+                          <option value="premium">Premium</option>
+                          <option value="vip">VIP</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Prix (€) *
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={ticketForm.basePrice}
+                          onChange={(e) => setTicketForm({...ticketForm, basePrice: e.target.value})}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          required
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                      >
+                        Enregistrer le billet
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Scanner QR Code */}
+                  <div className="bg-white border border-gray-200 rounded-lg p-6">
+                    <div className="flex items-center mb-6">
+                      <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Scanner QR</h3>
+                        <p className="text-sm text-gray-500">Scan rapide</p>
+                      </div>
+                    </div>
+
+                    {scannerActive ? (
+                      <div className="space-y-4">
+                        <div className="bg-gray-100 rounded-lg p-8 text-center">
+                          <svg className="w-24 h-24 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                           </svg>
-                          <p className="text-sm text-blue-700">
-                            Ce billet est valide pour l'entrée. Présentez le code QR au contrôle.
-                          </p>
+                          <p className="text-gray-600 mb-4">Scanner activé</p>
+                          <p className="text-sm text-gray-500">Positionnez le QR code devant la caméra</p>
                         </div>
+                        <button
+                          onClick={() => setScannerActive(false)}
+                          className="w-full bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors"
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="bg-gray-50 rounded-lg p-8 text-center border-2 border-dashed border-gray-300">
+                          <svg className="w-24 h-24 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                          </svg>
+                          <p className="text-gray-600 mb-2">Scanner un QR Code</p>
+                          <p className="text-sm text-gray-500">Cliquez pour activer la caméra</p>
+                        </div>
+                        <button
+                          onClick={() => setScannerActive(true)}
+                          className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                        >
+                          Activer le scanner
+                        </button>
                       </div>
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* Buy Tickets Tab */}
-      {activeTab === 'buy-tickets' && (
-        <div>
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Événements à venir</h2>
-            <p className="text-gray-600">Sélectionnez un événement pour acheter vos billets</p>
-          </div>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {events.map((event) => (
-              <div key={event.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-6">
-                  <div className="mb-6">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{event.name}</h3>
-                    <div className="flex items-center text-gray-600 mb-3">
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      {formatDate(event.date)} à {event.time}
-                    </div>
-                    <div className="flex items-center text-gray-600 mb-4">
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      {event.venue}
-                    </div>
-                    
-                    <div className="mb-4">
-                      <h4 className="font-medium text-gray-900 mb-2">Compétitions incluses:</h4>
-                      <ul className="space-y-1">
-                        {event.competitions.map((competition, index) => (
-                          <li key={competition.id} className="text-sm text-gray-600">
-                            • {competition.name} ({competition.type}) - {competition.startTime}
-                          </li>
-                        ))}
+                {/* Info */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div className="text-sm text-blue-800">
+                      <p className="font-medium mb-1">Comment enregistrer un billet ?</p>
+                      <ul className="list-disc list-inside space-y-1 text-blue-700">
+                        <li>Utilisez le formulaire pour saisir manuellement les informations</li>
+                        <li>Ou scannez le QR code d'un billet existant</li>
+                        <li>Le billet sera automatiquement associé à votre compte</li>
                       </ul>
                     </div>
                   </div>
-                  
-                  <div className="border-t border-gray-200 pt-6">
-                    <h4 className="font-medium text-gray-900 mb-4">Choisissez votre catégorie</h4>
-                    
-                    <div className="space-y-4 mb-6">
-                      {event.categories.map((category) => (
-                        <div key={category.type} className="relative">
-                          <label className={`flex items-start p-4 border rounded-lg cursor-pointer transition-colors ${
-                            selectedCategory === category.type 
-                              ? 'border-blue-500 bg-blue-50' 
-                              : 'border-gray-200 hover:border-gray-300'
-                          } ${category.available === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                            <div className="flex items-center h-5">
-                              <input
-                                type="radio"
-                                name={`category-${event.id}`}
-                                value={category.type}
-                                checked={selectedCategory === category.type}
-                                onChange={() => setSelectedCategory(category.type)}
-                                disabled={category.available === 0}
-                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                              />
-                            </div>
-                            <div className="ml-3 flex-1">
-                              <div className="flex justify-between items-center">
-                                <span className="font-medium text-gray-900">
-                                  {category.type === 'standard' ? 'Standard' : 
-                                   category.type === 'premium' ? 'Premium' : 'VIP'}
-                                </span>
-                                <span className="font-semibold text-gray-900">{category.price}€</span>
-                              </div>
-                              <ul className="mt-2 text-sm text-gray-600">
-                                {category.benefits.map((benefit, index) => (
-                                  <li key={index} className="flex items-center">
-                                    <svg className="w-4 h-4 mr-1 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    {benefit}
-                                  </li>
-                                ))}
-                              </ul>
-                              <p className="mt-2 text-sm text-gray-500">
-                                {category.available > 0 ? (
-                                  `${category.available} place${category.available > 1 ? 's' : ''} disponible${category.available > 1 ? 's' : ''}`
-                                ) : (
-                                  <span className="text-red-500">Complet</span>
-                                )}
-                              </p>
-                            </div>
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                    
-                    <div className="flex items-center justify-between mb-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Quantité
-                        </label>
-                        <div className="flex items-center">
-                          <button
-                            onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                            className="w-10 h-10 flex items-center justify-center border border-gray-300 rounded-l-lg bg-gray-50 hover:bg-gray-100"
-                          >
-                            <span className="text-lg">−</span>
-                          </button>
-                          <span className="w-12 h-10 flex items-center justify-center border-t border-b border-gray-300 bg-white">
-                            {quantity}
-                          </span>
-                          <button
-                            onClick={() => setQuantity(quantity + 1)}
-                            className="w-10 h-10 flex items-center justify-center border border-gray-300 rounded-r-lg bg-gray-50 hover:bg-gray-100"
-                          >
-                            <span className="text-lg">+</span>
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="text-right">
-                        <p className="text-sm text-gray-500">Total</p>
-                        <p className="text-2xl font-bold text-gray-900">
-                          {calculateTotal(event.id, quantity)}€
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <button
-                      onClick={() => handlePurchase(event.id)}
-                      disabled={loading || event.ticketsAvailable === 0}
-                      className={`w-full py-3 px-4 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                        event.ticketsAvailable === 0
-                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                          : 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
-                      }`}
-                    >
-                      {loading ? (
-                        <span className="flex items-center justify-center">
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                          Traitement en cours...
-                        </span>
-                      ) : event.ticketsAvailable === 0 ? (
-                        'Complet'
-                      ) : (
-                        `Acheter ${quantity} billet${quantity > 1 ? 's' : ''}`
-                      )}
-                    </button>
-                  </div>
                 </div>
               </div>
-            ))}
-          </div>
-          
-          {/* Information Panel */}
-          <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
-            <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
-              <svg className="w-5 h-5 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Informations importantes
-            </h4>
-            <ul className="space-y-2 text-sm text-gray-700">
-              <li className="flex items-start">
-                <svg className="w-4 h-4 text-blue-500 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Votre billet numérique sera disponible immédiatement après l'achat
-              </li>
-              <li className="flex items-start">
-                <svg className="w-4 h-4 text-blue-500 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Présentez le code QR à l'entrée de l'événement
-              </li>
-              <li className="flex items-start">
-                <svg className="w-4 h-4 text-blue-500 mr-2 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Les billets ne sont ni remboursables ni échangeables
-              </li>
-            </ul>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

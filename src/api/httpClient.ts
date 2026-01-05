@@ -1,12 +1,14 @@
 import axios from 'axios';
 
-// Bases read from environment to remove hardcoded URLs:
+// Tout passe par le gateway sur le port 8080
+const GATEWAY = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
+
 export const apiBases = {
-  // Use the gateway for auth so browser requests go through the API gateway (CORS handled by gateway)
-  auth: 'http://localhost:8080',
-  events: 'http://localhost:8080',
-  incidents: 'http://localhost:8084',
-  billetterie: 'http://localhost:8083',
+  // Tous les services passent par le gateway
+  auth: GATEWAY,
+  events: GATEWAY,
+  incidents: GATEWAY,
+  billetterie: GATEWAY,
 };
 
 // Shared Axios instance

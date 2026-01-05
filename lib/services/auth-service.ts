@@ -23,7 +23,7 @@ export const authRepo = {
   },
 
   async getUserByUsername(username: string): Promise<Admin | Spectateur | Volontaire | Commissaire | Athlete | null> {
-    return http.get<Admin | Spectateur | Volontaire | Commissaire | Athlete | null>("/auth/by-username", { username })
+    return http.get<Admin | Spectateur | Volontaire | Commissaire | Athlete | null>(`/auth/user/username/${encodeURIComponent(username)}`)
   },
 
   async hello(): Promise<{ message: string }> {

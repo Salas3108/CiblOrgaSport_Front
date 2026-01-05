@@ -14,6 +14,7 @@ import { logout } from "@/utils/auth"
 import { assertApiBaseUrlOrThrow } from "@/utils/env"
 import Link from "next/link"
 import { useAuth } from "@/components/auth/auth-provider"
+import { authRepo } from "@/lib/services/auth-service"
 
 // try to decode a JWT payload in browser
 function decodeJwtPayload(token: string | null) {
@@ -141,6 +142,19 @@ export function LoginForm() {
       }
 
       const { token, user, type } = await res.json()
+      // persist token early so downstream normalization/decoding can use it
+      localStorage.setItem("token", token)
+
+      // attempt to fetch full user profile (to get numeric id) using username
+      let fullUser = user
+      try {
+        if (user?.username) {
+          const fetched = await authRepo.getUserByUsername(user.username)
+          if (fetched) fullUser = { ...fullUser, ...fetched }
+        }
+      } catch (e) {
+        // ignore fetch errors; we'll still persist what we have
+      }
       if (process.env.NODE_ENV === "development") {
         // eslint-disable-next-line no-console
         console.log("[LoginForm] Response body:", {
@@ -177,30 +191,33 @@ export function LoginForm() {
       // Use AuthProvider.login so the context updates immediately
       try {
         login({
-          username: user?.username || formData.username,
-          email: user?.email || "",
+          username: fullUser?.username || formData.username,
+          email: fullUser?.email || "",
           role: backendRole,
           uiRole,
-          name: user?.username || formData.username,
+          name: fullUser?.username || formData.username,
           authenticated: true,
           type: type || "Bearer",
+          // include id if available from fetched profile
+          id: fullUser?.id ?? fullUser?.userId ?? fullUser?.spectatorId,
         })
       } catch (e) {
         // fallback: persist directly
         localStorage.setItem(
           "user",
           JSON.stringify({
-            username: user?.username || formData.username,
-            email: user?.email || "",
+            username: fullUser?.username || formData.username,
+            email: fullUser?.email || "",
             role: backendRole,
             uiRole,
-            name: user?.username || formData.username,
+            name: fullUser?.username || formData.username,
             authenticated: true,
             type: type || "Bearer",
+            id: fullUser?.id ?? fullUser?.userId ?? fullUser?.spectatorId,
           })
         )
       }
-      localStorage.setItem("token", token)
+      
 
       const target = "/"; // Redirection vers la page d'accueil après connexion
       router.push(target)
