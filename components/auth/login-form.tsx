@@ -202,14 +202,7 @@ export function LoginForm() {
       }
       localStorage.setItem("token", token)
 
-      const target = ROLE_REDIRECTS[uiRole] || "/"
-      if (!uiRole) {
-        setError(
-          `Rôle inconnu: "${user?.role}". Rôles possibles: ${POSSIBLE_ROLES.join(
-            ", "
-          )}. Redirection vers la page d’accueil.`
-        )
-      }
+      const target = "/"; // Redirection vers la page d'accueil après connexion
       router.push(target)
     } catch (err: any) {
       if (process.env.NODE_ENV === "development") {

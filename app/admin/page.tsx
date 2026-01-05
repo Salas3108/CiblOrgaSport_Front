@@ -2,11 +2,12 @@
 import { Header } from "@/components/header"
 import UserValidation from "@/src/components/admin/UserValidation"
 import EventManagement from "@/src/components/admin/EventManagement"
+import LieuManagement from "@/src/components/admin/LieuManagement"
 import ListeAthletes from "@/src/components/admin/ListeAthletes"
 import { useState } from "react"
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'users' | 'events'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'lieux'>('users');
 
   return (
     <div className="min-h-screen bg-background">
@@ -16,7 +17,7 @@ export default function AdminPage() {
           {/* Admin Header */}
           <div>
             <h1 className="text-3xl font-bold">Administration Dashboard</h1>
-            <p className="text-muted-foreground">Gestion des utilisateurs et événements</p>
+            <p className="text-muted-foreground">Gestion des utilisateurs, événements et lieux</p>
           </div>
 
           {/* Navigation Tabs */}
@@ -42,6 +43,16 @@ export default function AdminPage() {
               >
                 Gestion des Événements
               </button>
+              <button
+                onClick={() => setActiveTab('lieux')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'lieux'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Gestion des Lieux
+              </button>
             </nav>
           </div>
 
@@ -53,6 +64,7 @@ export default function AdminPage() {
               </div>
             )}
             {activeTab === 'events' && <EventManagement />}
+            {activeTab === 'lieux' && <LieuManagement />}
           </div>
         </div>
       </main>
