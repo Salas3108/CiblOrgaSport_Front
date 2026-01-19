@@ -14,14 +14,16 @@ interface Lieu {
 interface Event {
   id: number;
   name: string;
-  date: string;
+  dateDebut: string;
+  dateFin: string;
   lieuPrincipal?: Lieu;
 }
 
 interface Competition {
   id: number;
   name: string;
-  date: string;
+  dateDebut: string;
+  dateFin: string;
   type: string;
   event?: Event;
   epreuves?: Epreuve[];
@@ -34,6 +36,8 @@ interface Epreuve {
   competition?: Competition;
   lieu?: Lieu;
   date?: string;
+  heureDebut: string;
+  heureFin: string;
 }
 
 export default function EventManagement() {
@@ -52,26 +56,30 @@ export default function EventManagement() {
   // Forms
   const [eventForm, setEventForm] = useState({ 
     name: '', 
-    date: '',
+    dateDebut: '',
+    dateFin: '',
     lieuPrincipalId: ''
   });
   const [competitionForm, setCompetitionForm] = useState({ 
     name: '', 
-    date: '', 
+    dateDebut: '', 
+    dateFin: '',
     type: '' 
   });
   const [epreuveForm, setEpreuveForm] = useState({
     nom: '',
     description: '',
     lieuId: '',
-    date: ''
+    date: '',
+    heureDebut: '09:00',
+    heureFin: '17:00'
   });
 
-  // Helper: get start/end from event/competition objects (supports single-date fallback)
+  // Helper: get start/end from event/competition objects
   const getRangeFrom = (obj: any) => {
     if (!obj) return { start: null, end: null };
-    const start = obj.startDate || obj.dateDebut || obj.dateStart || obj.date || null;
-    const end = obj.endDate || obj.dateFin || obj.dateEnd || obj.date || null;
+    const start = obj.dateDebut || obj.startDate || obj.dateStart || null;
+    const end = obj.dateFin || obj.endDate || obj.dateEnd || null;
     return { start, end };
   };
 
@@ -83,6 +91,33 @@ export default function EventManagement() {
     const s = startStr ? new Date(startStr) : d;
     const e = endStr ? new Date(endStr) : d;
     return d >= s && d <= e;
+  };
+
+  const isDateTimeWithin = (dateStr: string | undefined | null, timeStr: string | undefined | null, startStr: string | null, endStr: string | null) => {
+    if (!dateStr || !timeStr) return false;
+    
+    // Créer un objet Date avec la date et l'heure
+    const dateTimeStr = `${dateStr}T${timeStr}`;
+    const dt = new Date(dateTimeStr);
+    if (isNaN(dt.getTime())) return false;
+    
+    if (!startStr && !endStr) return true;
+    
+    // Convertir les dates de début/fin en Date objects
+    const startDate = startStr ? new Date(startStr) : null;
+    const endDate = endStr ? new Date(endStr) : null;
+    
+    // Pour la fin, on utilise la fin de journée (23:59:59)
+    if (endDate) {
+      endDate.setHours(23, 59, 59, 999);
+    }
+    
+    return (!startDate || dt >= startDate) && (!endDate || dt <= endDate);
+  };
+
+  const validateTimeRange = (heureDebut: string, heureFin: string): boolean => {
+    if (!heureDebut || !heureFin) return true;
+    return heureDebut < heureFin;
   };
 
   useEffect(() => {
@@ -119,16 +154,24 @@ export default function EventManagement() {
 
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validation des dates
+    if (eventForm.dateDebut > eventForm.dateFin) {
+      setError('La date de fin doit être postérieure à la date de début');
+      return;
+    }
+
     try {
       const eventData: any = {
         name: eventForm.name,
-        date: eventForm.date
+        dateDebut: eventForm.dateDebut,
+        dateFin: eventForm.dateFin
       };
       if (eventForm.lieuPrincipalId) {
         eventData.lieuPrincipalId = parseInt(eventForm.lieuPrincipalId);
       }
       await eventsService.adminCreateEvent(eventData);
-      setEventForm({ name: '', date: '', lieuPrincipalId: '' });
+      setEventForm({ name: '', dateDebut: '', dateFin: '', lieuPrincipalId: '' });
       loadData();
     } catch (error) {
       console.error('Failed to create event:', error);
@@ -139,23 +182,33 @@ export default function EventManagement() {
   const handleAddCompetition = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedEvent) return;
-    // Validation: competition date must fall into the event date/range (if provided)
+    
+    // Validation des dates de compétition
+    if (competitionForm.dateDebut > competitionForm.dateFin) {
+      setError('La date de fin de compétition doit être postérieure à la date de début');
+      return;
+    }
+
+    // Validation: les dates de compétition doivent être comprises dans l'événement
     const eventObj = events.find(ev => ev.id === selectedEvent);
     if (!eventObj) {
       setError('Événement introuvable.');
       return;
     }
-    const { start: evStart, end: evEnd } = getRangeFrom(eventObj as any);
-    if (competitionForm.date) {
-      if (!isDateWithin(competitionForm.date, evStart, evEnd)) {
-        setError("La date de la compétition doit être comprise dans la période de l'événement.");
-        return;
-      }
+    
+    const compStartDate = new Date(competitionForm.dateDebut);
+    const compEndDate = new Date(competitionForm.dateFin);
+    const eventStartDate = new Date(eventObj.dateDebut);
+    const eventEndDate = new Date(eventObj.dateFin);
+    
+    if (compStartDate < eventStartDate || compEndDate > eventEndDate) {
+      setError("Les dates de la compétition doivent être comprises dans la période de l'événement.");
+      return;
     }
 
     try {
       await eventsService.adminAddCompetitionToEvent(selectedEvent, competitionForm);
-      setCompetitionForm({ name: '', date: '', type: '' });
+      setCompetitionForm({ name: '', dateDebut: '', dateFin: '', type: '' });
       setError(null);
       loadData();
     } catch (error) {
@@ -168,10 +221,17 @@ export default function EventManagement() {
     e.preventDefault();
     if (!editingCompetition) return;
     
+    // Validation des dates
+    if (editingCompetition.dateDebut > editingCompetition.dateFin) {
+      setError('La date de fin doit être postérieure à la date de début');
+      return;
+    }
+
     try {
       await eventsService.updateCompetition(editingCompetition.id, {
         name: editingCompetition.name,
-        date: editingCompetition.date,
+        dateDebut: editingCompetition.dateDebut,
+        dateFin: editingCompetition.dateFin,
         type: editingCompetition.type
       });
       setEditingCompetition(null);
@@ -195,13 +255,19 @@ export default function EventManagement() {
   const handleAddEpreuve = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCompetition) return;
-    // Validation: competition must belong to selectedEvent (if any) and no duplicate epreuve names
+    
+    // Validation des heures
+    if (!validateTimeRange(epreuveForm.heureDebut, epreuveForm.heureFin)) {
+      setError("L'heure de fin doit être postérieure à l'heure de début");
+      return;
+    }
+
     const compObj = competitions.find(c => c.id === selectedCompetition);
     if (!compObj) {
       setError('Compétition introuvable.');
       return;
     }
-    // If a selectedEvent is set, ensure the competition belongs to it
+
     if (selectedEvent && compObj.event && compObj.event.id !== selectedEvent) {
       setError('La compétition sélectionnée n\'appartient pas à l\'événement courant.');
       return;
@@ -211,17 +277,18 @@ export default function EventManagement() {
       setError('Le nom de l\'épreuve est trop court.');
       return;
     }
+
     const exists = compObj.epreuves && compObj.epreuves.some((ep: any) => ep.nom === epreuveForm.nom);
     if (exists) {
       setError('Une épreuve avec ce nom existe déjà dans cette compétition.');
       return;
     }
 
-    // If epreuve has a date, ensure it lies within the competition date/range
+    // Si l'épreuve a une date, vérifier qu'elle est dans la période de la compétition
     if (epreuveForm.date) {
-      const { start: compStart, end: compEnd } = getRangeFrom(compObj as any);
-      if (!isDateWithin(epreuveForm.date, compStart, compEnd)) {
-        setError("La date de l'épreuve doit être comprise dans la période de la compétition.");
+      const { start: compStart, end: compEnd } = getRangeFrom(compObj);
+      if (!isDateTimeWithin(epreuveForm.date, epreuveForm.heureDebut, compStart, compEnd)) {
+        setError("La date et l'heure de l'épreuve doivent être comprises dans la période de la compétition.");
         return;
       }
     }
@@ -229,7 +296,9 @@ export default function EventManagement() {
     try {
       const epreuveData: any = {
         nom: epreuveForm.nom,
-        description: epreuveForm.description
+        description: epreuveForm.description,
+        heureDebut: epreuveForm.heureDebut,
+        heureFin: epreuveForm.heureFin
       };
       if (epreuveForm.lieuId) {
         epreuveData.lieuId = parseInt(epreuveForm.lieuId);
@@ -238,7 +307,14 @@ export default function EventManagement() {
         epreuveData.date = epreuveForm.date;
       }
       await eventsService.adminAddEpreuveToCompetition(selectedCompetition, epreuveData);
-      setEpreuveForm({ nom: '', description: '', lieuId: '', date: '' });
+      setEpreuveForm({ 
+        nom: '', 
+        description: '', 
+        lieuId: '', 
+        date: '',
+        heureDebut: '09:00',
+        heureFin: '17:00'
+      });
       setError(null);
       loadData();
     } catch (error) {
@@ -250,21 +326,31 @@ export default function EventManagement() {
   const handleUpdateEpreuve = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingEpreuve) return;
-    // Validate date is within its competition range (if date provided)
+    
+    // Validation des heures
+    if (!validateTimeRange(editingEpreuve.heureDebut, editingEpreuve.heureFin)) {
+      setError("L'heure de fin doit être postérieure à l'heure de début");
+      return;
+    }
+
     try {
-      // find parent competition for this epreuve
-      const compObj = competitions.find(c => c.epreuves && c.epreuves.some((ep: any) => ep.id === editingEpreuve.id));
+      const compObj = competitions.find(c => 
+        c.epreuves && c.epreuves.some((ep: any) => ep.id === editingEpreuve.id)
+      );
+      
       if (editingEpreuve.date && compObj) {
-        const { start: compStart, end: compEnd } = getRangeFrom(compObj as any);
-        if (!isDateWithin(editingEpreuve.date, compStart, compEnd)) {
-          setError("La date de l'épreuve doit être comprise dans la période de la compétition.");
+        const { start: compStart, end: compEnd } = getRangeFrom(compObj);
+        if (!isDateTimeWithin(editingEpreuve.date, editingEpreuve.heureDebut, compStart, compEnd)) {
+          setError("La date et l'heure de l'épreuve doivent être comprises dans la période de la compétition.");
           return;
         }
       }
 
       const epreuveData: any = {
         nom: editingEpreuve.nom,
-        description: editingEpreuve.description
+        description: editingEpreuve.description,
+        heureDebut: editingEpreuve.heureDebut,
+        heureFin: editingEpreuve.heureFin
       };
       if (editingEpreuve.lieu?.id) {
         epreuveData.lieuId = editingEpreuve.lieu.id;
@@ -338,6 +424,22 @@ export default function EventManagement() {
     });
   };
 
+  const formatDateTimeRange = (dateDebut: string, dateFin: string) => {
+    const debut = new Date(dateDebut);
+    const fin = new Date(dateFin);
+    
+    // Si c'est la même date, n'afficher qu'une date
+    if (debut.toDateString() === fin.toDateString()) {
+      return formatDate(dateDebut);
+    }
+    
+    return `${formatDate(dateDebut)} - ${formatDate(dateFin)}`;
+  };
+
+  const formatEpreuveTime = (heureDebut: string, heureFin: string) => {
+    return `${heureDebut} - ${heureFin}`;
+  };
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto p-6">
@@ -407,17 +509,31 @@ export default function EventManagement() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Date
-                </label>
-                <input
-                  type="date"
-                  value={eventForm.date}
-                  onChange={(e) => setEventForm({...eventForm, date: e.target.value})}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date de début
+                  </label>
+                  <input
+                    type="date"
+                    value={eventForm.dateDebut}
+                    onChange={(e) => setEventForm({...eventForm, dateDebut: e.target.value})}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Date de fin
+                  </label>
+                  <input
+                    type="date"
+                    value={eventForm.dateFin}
+                    onChange={(e) => setEventForm({...eventForm, dateFin: e.target.value})}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    required
+                  />
+                </div>
               </div>
 
               <div>
@@ -497,7 +613,7 @@ export default function EventManagement() {
                               <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>
-                              {formatDate(event.date)}
+                              {formatDateTimeRange(event.dateDebut, event.dateFin)}
                             </span>
                             <span className="inline-flex items-center text-sm text-gray-600">
                               <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -556,26 +672,33 @@ export default function EventManagement() {
                                         className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                         required
                                       />
-                                      <div className="flex gap-2">
+                                      <div className="grid grid-cols-2 gap-2">
                                         <input
                                           type="date"
-                                          value={editingCompetition.date}
-                                          onChange={(e) => setEditingCompetition({...editingCompetition, date: e.target.value})}
-                                          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                          value={editingCompetition.dateDebut}
+                                          onChange={(e) => setEditingCompetition({...editingCompetition, dateDebut: e.target.value})}
+                                          className="px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                           required
                                         />
-                                        <select
-                                          value={editingCompetition.type}
-                                          onChange={(e) => setEditingCompetition({...editingCompetition, type: e.target.value})}
-                                          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                        <input
+                                          type="date"
+                                          value={editingCompetition.dateFin}
+                                          onChange={(e) => setEditingCompetition({...editingCompetition, dateFin: e.target.value})}
+                                          className="px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                           required
-                                        >
-                                          <option value="Natation">Natation</option>
-                                          <option value="Athlétisme">Athlétisme</option>
-                                          <option value="Cyclisme">Cyclisme</option>
-                                          <option value="Triathlon">Triathlon</option>
-                                        </select>
+                                        />
                                       </div>
+                                      <select
+                                        value={editingCompetition.type}
+                                        onChange={(e) => setEditingCompetition({...editingCompetition, type: e.target.value})}
+                                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                        required
+                                      >
+                                        <option value="Natation">Natation</option>
+                                        <option value="Athlétisme">Athlétisme</option>
+                                        <option value="Cyclisme">Cyclisme</option>
+                                        <option value="Triathlon">Triathlon</option>
+                                      </select>
                                       <div className="flex gap-2">
                                         <button type="submit" className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">
                                           Sauvegarder
@@ -593,7 +716,7 @@ export default function EventManagement() {
                                     <>
                                       <div className="font-medium text-gray-900">{comp.name}</div>
                                       <div className="text-sm text-gray-500">
-                                        {comp.type} • {formatDate(comp.date)}
+                                        {comp.type} • {formatDateTimeRange(comp.dateDebut, comp.dateFin)}
                                         {comp.epreuves && comp.epreuves.length > 0 && (
                                           <span className="ml-2 text-blue-600 font-medium">
                                             • {comp.epreuves.length} épreuve{comp.epreuves.length !== 1 ? 's' : ''}
@@ -665,15 +788,37 @@ export default function EventManagement() {
                                                 rows={2}
                                                 required
                                               />
+                                              <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Date (optionnel)</label>
+                                                <input
+                                                  type="date"
+                                                  value={editingEpreuve.date || ''}
+                                                  onChange={(e) => setEditingEpreuve({...editingEpreuve, date: e.target.value})}
+                                                  className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                                />
+                                              </div>
+                                              <div className="grid grid-cols-2 gap-2">
                                                 <div>
-                                                  <label className="block text-xs font-medium text-gray-700 mb-1">Date (optionnel)</label>
+                                                  <label className="block text-xs font-medium text-gray-700 mb-1">Heure début</label>
                                                   <input
-                                                    type="date"
-                                                    value={editingEpreuve.date || ''}
-                                                    onChange={(e) => setEditingEpreuve({...editingEpreuve, date: e.target.value})}
+                                                    type="time"
+                                                    value={editingEpreuve.heureDebut}
+                                                    onChange={(e) => setEditingEpreuve({...editingEpreuve, heureDebut: e.target.value})}
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                                    required
                                                   />
                                                 </div>
+                                                <div>
+                                                  <label className="block text-xs font-medium text-gray-700 mb-1">Heure fin</label>
+                                                  <input
+                                                    type="time"
+                                                    value={editingEpreuve.heureFin}
+                                                    onChange={(e) => setEditingEpreuve({...editingEpreuve, heureFin: e.target.value})}
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                                    required
+                                                  />
+                                                </div>
+                                              </div>
                                               <select
                                                 value={editingEpreuve.lieu?.id || ''}
                                                 onChange={(e) => {
@@ -710,15 +855,23 @@ export default function EventManagement() {
                                                 <div className="text-xs text-gray-600 mt-1">
                                                   {epreuve.description}
                                                 </div>
-                                                {epreuve.lieu && (
-                                                  <div className="flex items-center gap-1 text-xs text-blue-600 mt-1">
-                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                    </svg>
-                                                    {epreuve.lieu.nom}
-                                                  </div>
-                                                )}
+                                                <div className="flex flex-wrap gap-2 mt-1">
+                                                  {epreuve.date && (
+                                                    <span className="inline-flex items-center text-xs text-gray-700 bg-gray-100 px-2 py-1 rounded">
+                                                      📅 {formatDate(epreuve.date)}
+                                                    </span>
+                                                  )}
+                                                  {epreuve.heureDebut && epreuve.heureFin && (
+                                                    <span className="inline-flex items-center text-xs text-blue-700 bg-blue-100 px-2 py-1 rounded">
+                                                      🕒 {formatEpreuveTime(epreuve.heureDebut, epreuve.heureFin)}
+                                                    </span>
+                                                  )}
+                                                  {epreuve.lieu && (
+                                                    <span className="inline-flex items-center text-xs text-green-700 bg-green-100 px-2 py-1 rounded">
+                                                      📍 {epreuve.lieu.nom}
+                                                    </span>
+                                                  )}
+                                                </div>
                                               </div>
                                               <div className="flex items-center gap-1">
                                                 <span className="text-xs font-medium text-blue-600 bg-blue-100 px-2 py-1 rounded mr-1">
@@ -782,6 +935,28 @@ export default function EventManagement() {
                                         className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                       />
                                     </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Heure début</label>
+                                        <input
+                                          type="time"
+                                          value={epreuveForm.heureDebut}
+                                          onChange={(e) => setEpreuveForm({...epreuveForm, heureDebut: e.target.value})}
+                                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                          required
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Heure fin</label>
+                                        <input
+                                          type="time"
+                                          value={epreuveForm.heureFin}
+                                          onChange={(e) => setEpreuveForm({...epreuveForm, heureFin: e.target.value})}
+                                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                          required
+                                        />
+                                      </div>
+                                    </div>
                                     <select
                                       value={epreuveForm.lieuId}
                                       onChange={(e) => setEpreuveForm({...epreuveForm, lieuId: e.target.value})}
@@ -841,33 +1016,46 @@ export default function EventManagement() {
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Date
+                                    Date de début
                                   </label>
                                   <input
                                     type="date"
-                                    value={competitionForm.date}
-                                    onChange={(e) => setCompetitionForm({...competitionForm, date: e.target.value})}
+                                    value={competitionForm.dateDebut}
+                                    onChange={(e) => setCompetitionForm({...competitionForm, dateDebut: e.target.value})}
                                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                     required
                                   />
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Type
+                                    Date de fin
                                   </label>
-                                  <select
-                                    value={competitionForm.type}
-                                    onChange={(e) => setCompetitionForm({...competitionForm, type: e.target.value})}
+                                  <input
+                                    type="date"
+                                    value={competitionForm.dateFin}
+                                    onChange={(e) => setCompetitionForm({...competitionForm, dateFin: e.target.value})}
                                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                     required
-                                  >
-                                    <option value="">Sélectionner un type</option>
-                                    <option value="Natation">Natation</option>
-                                    <option value="Athlétisme">Athlétisme</option>
-                                    <option value="Cyclisme">Cyclisme</option>
-                                    <option value="Triathlon">Triathlon</option>
-                                  </select>
+                                  />
                                 </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Type
+                                </label>
+                                <select
+                                  value={competitionForm.type}
+                                  onChange={(e) => setCompetitionForm({...competitionForm, type: e.target.value})}
+                                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  required
+                                >
+                                  <option value="">Sélectionner un type</option>
+                                  <option value="Natation">Natation</option>
+                                  <option value="Athlétisme">Athlétisme</option>
+                                  <option value="Cyclisme">Cyclisme</option>
+                                  <option value="Triathlon">Triathlon</option>
+                                </select>
                               </div>
 
                               <div className="flex justify-end">
@@ -880,41 +1068,6 @@ export default function EventManagement() {
                               </div>
                             </form>
                           </div>
-
-                          {/* Existing Competitions */}
-                          {event.competitions && event.competitions.length > 0 && (
-                            <div className="border-t border-gray-200 pt-6">
-                              <h6 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-4">
-                                Compétitions existantes
-                              </h6>
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {event.competitions.map((competition) => (
-                                  <div 
-                                    key={competition.id} 
-                                    className="bg-gray-50 border border-gray-200 rounded-lg p-4"
-                                  >
-                                    <div className="flex items-center justify-between mb-2">
-                                      <h6 className="font-medium text-gray-900">{competition.name}</h6>
-                                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                        competition.type === 'Natation' ? 'bg-blue-100 text-blue-800' :
-                                        competition.type === 'Athlétisme' ? 'bg-green-100 text-green-800' :
-                                        competition.type === 'Cyclisme' ? 'bg-purple-100 text-purple-800' :
-                                        'bg-yellow-100 text-yellow-800'
-                                      }`}>
-                                        {competition.type}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center text-sm text-gray-600">
-                                      <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                      </svg>
-                                      {formatDate(competition.date)}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
                         </div>
                       </div>
                     )}
