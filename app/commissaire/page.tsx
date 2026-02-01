@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { Header } from "@/components/header"
-import { ProtectedRoute } from "@/components/auth/protected-route"
+//import { ProtectedRoute } from "@/components/auth/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -215,7 +215,7 @@ export default function OfficialPage() {
   }
 
   return (
-    <ProtectedRoute allowedRoles={["official"]}>
+    //<ProtectedRoute allowedRoles={["official"]}>
       <div className="min-h-screen bg-background">
         <Header />
         <main className="container mx-auto px-4 py-8">
@@ -644,6 +644,6 @@ export default function OfficialPage() {
           </div>
         </main>
       </div>
-    </ProtectedRoute>
+   // </ProtectedRoute>
   )
 }
