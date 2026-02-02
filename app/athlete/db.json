@@ -1,0 +1,58 @@
+{
+  "athletes": [
+    {
+      "id": 1,
+      "nom": "Titouche",
+      "prenom": "Salim",
+      "dateNaissance": "2000-07-26",
+      "pays": "Algerie",
+      "valide": true,
+      "docs": {
+        "certificatMedical": "certificat_medical_salim.pdf",
+        "passport": "passport_salim.pdf"
+      },
+      "observation": "Certificat médical valide jusqu'au 31/12/2024"
+    },
+    {
+      "id": 2,
+      "nom": "Dupont",
+      "prenom": "Marie",
+      "dateNaissance": "2000-03-22",
+      "pays": "Belgique",
+      "valide": false,
+      "docs": {
+        "certificatMedical": null,
+        "passport": "passport_marie.pdf"
+      },
+      "observation": "En attente du certificat médical"
+    },
+    {
+      "id": 3,
+      "nom": "Müller",
+      "prenom": "Hans",
+      "dateNaissance": "2001-11-30",
+      "pays": "Allemagne",
+      "valide": true,
+      "docs": {
+        "certificatMedical": "certificat_medical_hans.pdf",
+        "passport": "passport_hans.pdf"
+      },
+      "observation": ""
+    },
+    {
+      "id": 4,
+      "nom": "Rossi",
+      "prenom": "Luca",
+      "dateNaissance": "2003-07-14",
+      "pays": "Italie",
+      "valide": false,
+      "docs": {
+        "certificatMedical": "certificat_medical_luca.pdf",
+        "passport": null
+      },
+      "observation": "Passeport expiré - demande de renouvellement"
+    }
+  ],
+  "messages": [],
+  "logs": []
+}
