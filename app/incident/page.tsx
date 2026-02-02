@@ -4,33 +4,16 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 interface Incident {
-  id: string;
-  title: string;
+  id: number;
   description: string;
-  type: 'crowd' | 'technical' | 'medical' | 'security' | 'weather' | 'other';
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  impactLevel: 'FAIBLE' | 'MOYEN' | 'ELEVE' | 'CRITIQUE';
+  type: 'SECURITE' | 'TECHNIQUE' | 'METEO' | 'MEDICAL' | 'AUTRE';
   location: string;
-  eventId?: string;
-  eventName?: string;
-  status: 'active' | 'resolved' | 'investigating';
-  createdAt: string;
-  updatedAt: string;
-  reportedBy: {
-    id: string;
-    name: string;
-    role: 'admin' | 'commissioner' | 'volunteer';
-  };
-  affectedAreas?: string[];
-  actionTaken?: string;
-  resolvedAt?: string;
-}
-
-interface Event {
-  id: string;
-  name: string;
-  date: string;
-  location: string;
-  status: 'upcoming' | 'ongoing' | 'completed';
+  status: 'ACTIF' | 'RESOLU';
+  reportedBy: string;
+  reportedAt: string;
+  updatedAt: string | null;
+  resolvedAt: string | null;
 }
 
 interface IncidentStats {
@@ -40,157 +23,99 @@ interface IncidentStats {
   today: number;
 }
 
-// Données simulées
-const mockIncidents: Incident[] = [
-  {
-    id: 'INC-001',
-    title: 'Mouvement de foule important',
-    description: 'Affluence anormale à l\'entrée principale du stade. Risque de bousculade.',
-    type: 'crowd',
-    severity: 'high',
-    location: 'Entrée principale - Stade Olympique',
-    eventId: 'EVENT-001',
-    eventName: 'Finales d\'Athlétisme',
-    status: 'active',
-    createdAt: '2024-07-25T14:30:00',
-    updatedAt: '2024-07-25T14:45:00',
-    reportedBy: {
-      id: 'USER-001',
-      name: 'Pierre Martin',
-      role: 'commissioner'
-    },
-    affectedAreas: ['Entrée Nord', 'Zone de contrôle'],
-    actionTaken: 'Renforcement de la sécurité, ouverture de portes supplémentaires'
-  },
-  {
-    id: 'INC-002',
-    title: 'Problème technique système son',
-    description: 'Le système de sonorisation de la tribune Ouest ne fonctionne plus.',
-    type: 'technical',
-    severity: 'medium',
-    location: 'Tribune Ouest - Stade Nautique',
-    eventId: 'EVENT-002',
-    eventName: 'Compétition de Natation',
-    status: 'investigating',
-    createdAt: '2024-07-25T10:15:00',
-    updatedAt: '2024-07-25T10:45:00',
-    reportedBy: {
-      id: 'USER-002',
-      name: 'Sophie Bernard',
-      role: 'admin'
-    },
-    affectedAreas: ['Tribune Ouest'],
-    actionTaken: 'Techniciens sur place, système de secours activé'
-  },
-  {
-    id: 'INC-003',
-    title: 'Malaise spectateur',
-    description: 'Spectateur ressentant des malaises en zone de restauration.',
-    type: 'medical',
-    severity: 'medium',
-    location: 'Zone de restauration - Secteur B',
-    status: 'resolved',
-    createdAt: '2024-07-24T16:20:00',
-    updatedAt: '2024-07-24T16:45:00',
-    resolvedAt: '2024-07-24T16:45:00',
-    reportedBy: {
-      id: 'USER-003',
-      name: 'Jean Dubois',
-      role: 'volunteer'
-    },
-    actionTaken: 'Prise en charge par le service médical, évacuation vers l\'infirmerie'
-  },
-  {
-    id: 'INC-004',
-    title: 'Suspicion objet suspect',
-    description: 'Sac abandonné près des vestiaires.',
-    type: 'security',
-    severity: 'critical',
-    location: 'Vestiaires Athlètes - Bâtiment Est',
-    eventId: 'EVENT-003',
-    eventName: 'Finales de Gymnastique',
-    status: 'active',
-    createdAt: '2024-07-25T09:00:00',
-    updatedAt: '2024-07-25T09:30:00',
-    reportedBy: {
-      id: 'USER-004',
-      name: 'Marie Laurent',
-      role: 'commissioner'
-    },
-    affectedAreas: ['Zone Est', 'Vestiaires'],
-    actionTaken: 'Zone sécurisée, intervention des forces de l\'ordre'
-  },
-  {
-    id: 'INC-005',
-    title: 'Problème d\'éclairage',
-    description: 'Panneaux d\'éclairage partiellement défaillants sur le parcours.',
-    type: 'technical',
-    severity: 'low',
-    location: 'Parcours Triathlon - Secteur 3',
-    eventId: 'EVENT-004',
-    eventName: 'Épreuves de Triathlon',
-    status: 'resolved',
-    createdAt: '2024-07-23T18:45:00',
-    updatedAt: '2024-07-23T19:30:00',
-    resolvedAt: '2024-07-23T19:30:00',
-    reportedBy: {
-      id: 'USER-005',
-      name: 'Thomas Petit',
-      role: 'volunteer'
-    },
-    actionTaken: 'Réparation effectuée, vérification du circuit'
-  }
-];
-
-const mockEvents: Event[] = [
-  { id: 'EVENT-001', name: 'Finales d\'Athlétisme', date: '2024-07-25', location: 'Stade Olympique', status: 'ongoing' },
-  { id: 'EVENT-002', name: 'Compétition de Natation', date: '2024-07-25', location: 'Stade Nautique', status: 'ongoing' },
-  { id: 'EVENT-003', name: 'Finales de Gymnastique', date: '2024-07-26', location: 'Palais des Sports', status: 'upcoming' },
-  { id: 'EVENT-004', name: 'Épreuves de Triathlon', date: '2024-07-28', location: 'Parc Triathlon', status: 'upcoming' },
-  { id: 'EVENT-005', name: 'Compétition de Cyclisme', date: '2024-07-24', location: 'Vélodrome National', status: 'completed' }
-];
-
 export default function IncidentPage() {
-  const [incidents, setIncidents] = useState<Incident[]>(mockIncidents);
-  const [events] = useState<Event[]>(mockEvents);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [showReportForm, setShowReportForm] = useState(false);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
   const [filters, setFilters] = useState({
     status: 'all',
     type: 'all',
-    severity: 'all',
-    date: 'all'
+    impactLevel: 'all',
   });
   const [newIncident, setNewIncident] = useState({
-    title: '',
     description: '',
-    type: 'technical' as Incident['type'],
-    severity: 'medium' as Incident['severity'],
+    type: 'TECHNIQUE' as Incident['type'],
+    impactLevel: 'MOYEN' as Incident['impactLevel'],
     location: '',
-    eventId: '',
-    affectedAreas: [] as string[],
-    actionTaken: ''
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [userRole] = useState<'user' | 'volunteer' | 'commissioner' | 'admin'>('commissioner');
+  const [isFetching, setIsFetching] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Récupérer les incidents depuis l'API
+  const fetchIncidents = async () => {
+    setIsFetching(true);
+    setError(null);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/incidents', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('Accès interdit. Vérifiez vos permissions.');
+        }
+        throw new Error(`Erreur HTTP: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setIncidents(data);
+    } catch (error) {
+      console.error('Erreur lors de la récupération des incidents:', error);
+      setError(error instanceof Error ? error.message : 'Impossible de charger les incidents. Veuillez réessayer.');
+    } finally {
+      setIsFetching(false);
+    }
+  };
+
+  // Décoder le token pour obtenir le rôle
+  const decodeToken = () => {
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+    
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      
+      const decoded = JSON.parse(jsonPayload);
+      return decoded.roles || decoded.role || decoded.authorities?.[0] || null;
+    } catch (error) {
+      console.error('Erreur lors du décodage du token:', error);
+      return null;
+    }
+  };
 
   // Calculer les statistiques
   const stats: IncidentStats = {
-    active: incidents.filter(i => i.status === 'active').length,
-    resolved: incidents.filter(i => i.status === 'resolved').length,
-    critical: incidents.filter(i => i.severity === 'critical').length,
+    active: incidents.filter(i => i.status === 'ACTIF').length,
+    resolved: incidents.filter(i => i.status === 'RESOLU').length,
+    critical: incidents.filter(i => i.impactLevel === 'CRITIQUE').length,
     today: incidents.filter(i => {
       const today = new Date().toDateString();
-      return new Date(i.createdAt).toDateString() === today;
+      return new Date(i.reportedAt).toDateString() === today;
     }).length
   };
 
   useEffect(() => {
-    // Ici, vous feriez normalement des appels API
-    // setIncidents(await getIncidents());
-    // setEvents(await getEvents());
+    // Récupérer le rôle depuis le token
+    const role = decodeToken();
+    setUserRole(role);
+    
+    // Charger les incidents
+    fetchIncidents();
   }, []);
 
   const handleFilterChange = (key: keyof typeof filters, value: string) => {
@@ -200,58 +125,95 @@ export default function IncidentPage() {
   const handleReportIncident = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
-    // Simuler un appel API
-    setTimeout(() => {
-      const incident: Incident = {
-        id: `INC-${Date.now().toString().slice(-6)}`,
-        title: newIncident.title,
-        description: newIncident.description,
-        type: newIncident.type,
-        severity: newIncident.severity,
-        location: newIncident.location,
-        eventId: newIncident.eventId || undefined,
-        eventName: newIncident.eventId ? events.find(e => e.id === newIncident.eventId)?.name : undefined,
-        status: 'active',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        reportedBy: {
-          id: 'USER-CURRENT',
-          name: 'Vous',
-          role: userRole as any
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:8080/api/incidents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
-        affectedAreas: newIncident.affectedAreas,
-        actionTaken: newIncident.actionTaken
-      };
+        body: JSON.stringify({
+          description: newIncident.description,
+          type: newIncident.type,
+          impactLevel: newIncident.impactLevel,
+          location: newIncident.location,
+          status: 'ACTIF'
+        })
+      });
 
-      setIncidents([incident, ...incidents]);
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('Accès interdit. Seuls les ADMIN et COMMISSAIRE peuvent déclarer des incidents.');
+        }
+        throw new Error(`Erreur HTTP: ${response.status}`);
+      }
+
+      const createdIncident = await response.json();
+      setIncidents([createdIncident, ...incidents]);
       setNewIncident({
-        title: '',
         description: '',
-        type: 'technical',
-        severity: 'medium',
+        type: 'TECHNIQUE',
+        impactLevel: 'MOYEN',
         location: '',
-        eventId: '',
-        affectedAreas: [],
-        actionTaken: ''
       });
       setShowReportForm(false);
+    } catch (error) {
+      console.error('Erreur lors de la création de l\'incident:', error);
+      setError(error instanceof Error ? error.message : 'Impossible de créer l\'incident. Veuillez réessayer.');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
-  const handleUpdateStatus = (incidentId: string, status: Incident['status']) => {
-    setIncidents(incidents.map(incident => {
-      if (incident.id === incidentId) {
-        return {
-          ...incident,
-          status,
-          updatedAt: new Date().toISOString(),
-          ...(status === 'resolved' ? { resolvedAt: new Date().toISOString() } : {})
-        };
+  const handleUpdateStatus = async (incidentId: number, status: Incident['status']) => {
+    try {
+      // Trouver l'incident à mettre à jour
+      const incidentToUpdate = incidents.find(incident => incident.id === incidentId);
+      if (!incidentToUpdate) {
+        throw new Error('Incident non trouvé');
       }
-      return incident;
-    }));
+
+      const token = localStorage.getItem('token');
+      
+      // Créer l'objet complet de l'incident avec le statut mis à jour
+      const updatedIncidentData = {
+        ...incidentToUpdate,
+        status,
+        // Le backend gère les dates, on peut les laisser comme elles sont
+      };
+
+      const response = await fetch(`http://localhost:8080/api/incidents/${incidentId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updatedIncidentData)
+      });
+
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('Accès interdit. Seuls les ADMIN et COMMISSAIRE peuvent modifier les incidents.');
+        }
+        throw new Error(`Erreur HTTP: ${response.status}`);
+      }
+
+      const updatedIncident = await response.json();
+      setIncidents(incidents.map(incident => 
+        incident.id === incidentId ? updatedIncident : incident
+      ));
+      
+      // Mettre à jour l'incident sélectionné si ouvert
+      if (selectedIncident && selectedIncident.id === incidentId) {
+        setSelectedIncident(updatedIncident);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du statut:', error);
+      setError(error instanceof Error ? error.message : 'Impossible de mettre à jour le statut. Veuillez réessayer.');
+    }
   };
 
   const formatDateTime = (dateString: string) => {
@@ -261,51 +223,44 @@ export default function IncidentPage() {
 
   const getStatusColor = (status: Incident['status']) => {
     switch (status) {
-      case 'active': return 'bg-red-100 text-red-800';
-      case 'investigating': return 'bg-yellow-100 text-yellow-800';
-      case 'resolved': return 'bg-green-100 text-green-800';
+      case 'ACTIF': return 'bg-red-100 text-red-800';
+      case 'RESOLU': return 'bg-green-100 text-green-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const getSeverityColor = (severity: Incident['severity']) => {
-    switch (severity) {
-      case 'critical': return 'bg-red-600 text-white';
-      case 'high': return 'bg-orange-500 text-white';
-      case 'medium': return 'bg-yellow-500 text-white';
-      case 'low': return 'bg-blue-500 text-white';
+  const getSeverityColor = (impactLevel: Incident['impactLevel']) => {
+    switch (impactLevel) {
+      case 'CRITIQUE': return 'bg-red-600 text-white';
+      case 'ELEVE': return 'bg-orange-500 text-white';
+      case 'MOYEN': return 'bg-yellow-500 text-white';
+      case 'FAIBLE': return 'bg-blue-500 text-white';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getTypeIcon = (type: Incident['type']) => {
     switch (type) {
-      case 'crowd':
+      case 'SECURITE':
         return (
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
         );
-      case 'technical':
+      case 'TECHNIQUE':
         return (
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
         );
-      case 'medical':
+      case 'MEDICAL':
         return (
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
         );
-      case 'security':
-        return (
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-          </svg>
-        );
-      case 'weather':
+      case 'METEO':
         return (
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4 4 0 003 15z" />
@@ -322,21 +277,27 @@ export default function IncidentPage() {
 
   const getTypeLabel = (type: Incident['type']) => {
     switch (type) {
-      case 'crowd': return 'Foule';
-      case 'technical': return 'Technique';
-      case 'medical': return 'Médical';
-      case 'security': return 'Sécurité';
-      case 'weather': return 'Météo';
-      case 'other': return 'Autre';
+      case 'SECURITE': return 'Sécurité';
+      case 'TECHNIQUE': return 'Technique';
+      case 'MEDICAL': return 'Médical';
+      case 'METEO': return 'Météo';
+      case 'AUTRE': return 'Autre';
     }
   };
 
-  const getSeverityLabel = (severity: Incident['severity']) => {
-    switch (severity) {
-      case 'critical': return 'Critique';
-      case 'high': return 'Élevée';
-      case 'medium': return 'Moyenne';
-      case 'low': return 'Faible';
+  const getSeverityLabel = (impactLevel: Incident['impactLevel']) => {
+    switch (impactLevel) {
+      case 'CRITIQUE': return 'Critique';
+      case 'ELEVE': return 'Élevé';
+      case 'MOYEN': return 'Moyen';
+      case 'FAIBLE': return 'Faible';
+    }
+  };
+
+  const getStatusLabel = (status: Incident['status']) => {
+    switch (status) {
+      case 'ACTIF': return 'Actif';
+      case 'RESOLU': return 'Résolu';
     }
   };
 
@@ -344,13 +305,13 @@ export default function IncidentPage() {
   const filteredIncidents = incidents.filter(incident => {
     if (filters.status !== 'all' && incident.status !== filters.status) return false;
     if (filters.type !== 'all' && incident.type !== filters.type) return false;
-    if (filters.severity !== 'all' && incident.severity !== filters.severity) return false;
-    if (searchQuery && !incident.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !incident.description.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (filters.impactLevel !== 'all' && incident.impactLevel !== filters.impactLevel) return false;
+    if (searchQuery && !incident.description.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
-  const canReportIncident = ['admin', 'commissioner', 'volunteer'].includes(userRole);
+  // Vérifier les permissions basées sur le rôle
+  const canReportIncident = userRole === 'ROLE_ADMIN' || userRole === 'ROLE_COMMISSAIRE';
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6">
@@ -376,6 +337,18 @@ export default function IncidentPage() {
           )}
         </div>
       </div>
+
+      {/* Affichage des erreurs */}
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.346 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            {error}
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -461,9 +434,8 @@ export default function IncidentPage() {
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">Tous les statuts</option>
-              <option value="active">Actif</option>
-              <option value="investigating">En cours</option>
-              <option value="resolved">Résolu</option>
+              <option value="ACTIF">Actif</option>
+              <option value="RESOLU">Résolu</option>
             </select>
 
             <select
@@ -472,24 +444,23 @@ export default function IncidentPage() {
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">Tous les types</option>
-              <option value="crowd">Foule</option>
-              <option value="technical">Technique</option>
-              <option value="medical">Médical</option>
-              <option value="security">Sécurité</option>
-              <option value="weather">Météo</option>
-              <option value="other">Autre</option>
+              <option value="SECURITE">Sécurité</option>
+              <option value="TECHNIQUE">Technique</option>
+              <option value="MEDICAL">Médical</option>
+              <option value="METEO">Météo</option>
+              <option value="AUTRE">Autre</option>
             </select>
 
             <select
-              value={filters.severity}
-              onChange={(e) => handleFilterChange('severity', e.target.value)}
+              value={filters.impactLevel}
+              onChange={(e) => handleFilterChange('impactLevel', e.target.value)}
               className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="all">Toutes les gravités</option>
-              <option value="critical">Critique</option>
-              <option value="high">Élevée</option>
-              <option value="medium">Moyenne</option>
-              <option value="low">Faible</option>
+              <option value="CRITIQUE">Critique</option>
+              <option value="ELEVE">Élevé</option>
+              <option value="MOYEN">Moyen</option>
+              <option value="FAIBLE">Faible</option>
             </select>
           </div>
         </div>
@@ -498,13 +469,44 @@ export default function IncidentPage() {
       {/* Incidents List */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="px-6 py-5 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Historique des incidents ({filteredIncidents.length})
-          </h3>
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Historique des incidents ({isFetching ? '...' : filteredIncidents.length})
+            </h3>
+            <button
+              onClick={fetchIncidents}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center"
+              disabled={isFetching}
+            >
+              {isFetching ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                  Chargement...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Actualiser
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         <div className="divide-y divide-gray-200">
-          {filteredIncidents.length === 0 ? (
+          {isFetching ? (
+            <div className="text-center py-16">
+              <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              </div>
+              <h4 className="text-lg font-medium text-gray-900 mb-2">Chargement des incidents</h4>
+              <p className="text-gray-500 max-w-sm mx-auto">
+                Récupération des données depuis le serveur...
+              </p>
+            </div>
+          ) : filteredIncidents.length === 0 ? (
             <div className="text-center py-16">
               <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                 <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -513,7 +515,7 @@ export default function IncidentPage() {
               </div>
               <h4 className="text-lg font-medium text-gray-900 mb-2">Aucun incident trouvé</h4>
               <p className="text-gray-500 max-w-sm mx-auto">
-                {searchQuery ? 'Aucun incident ne correspond à votre recherche' : 'Aucun incident à afficher avec les filtres actuels'}
+                {searchQuery ? 'Aucun incident ne correspond à votre recherche' : 'Aucun incident à afficher'}
               </p>
             </div>
           ) : (
@@ -522,22 +524,22 @@ export default function IncidentPage() {
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between">
                   <div className="flex-1">
                     <div className="flex items-start mb-3">
-                      <div className={`p-2 rounded-lg ${getSeverityColor(incident.severity)} mr-3`}>
+                      <div className={`p-2 rounded-lg ${getSeverityColor(incident.impactLevel)} mr-3`}>
                         {getTypeIcon(incident.type)}
                       </div>
                       <div className="flex-1">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                           <div>
-                            <h4 className="text-lg font-semibold text-gray-900 mb-1">{incident.title}</h4>
+                            <h4 className="text-lg font-semibold text-gray-900 mb-1">Incident #{incident.id}</h4>
                             <div className="flex flex-wrap gap-2 mb-2">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(incident.status)}`}>
-                                {incident.status === 'active' ? 'Actif' : incident.status === 'investigating' ? 'En cours' : 'Résolu'}
+                                {getStatusLabel(incident.status)}
                               </span>
                               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                                 {getTypeLabel(incident.type)}
                               </span>
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(incident.severity)}`}>
-                                {getSeverityLabel(incident.severity)}
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(incident.impactLevel)}`}>
+                                {getSeverityLabel(incident.impactLevel)}
                               </span>
                             </div>
                           </div>
@@ -554,7 +556,7 @@ export default function IncidentPage() {
                           </div>
                         </div>
                         
-                        <p className="text-gray-600 mb-3 line-clamp-2">{incident.description}</p>
+                        <p className="text-gray-600 mb-3">{incident.description}</p>
                         
                         <div className="flex flex-wrap items-center text-sm text-gray-500 gap-4">
                           <span className="flex items-center">
@@ -564,53 +566,32 @@ export default function IncidentPage() {
                             </svg>
                             {incident.location}
                           </span>
-                          {incident.eventName && (
-                            <span className="flex items-center">
-                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              {incident.eventName}
-                            </span>
-                          )}
+                          <span className="flex items-center">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            {incident.reportedBy}
+                          </span>
                           <span className="flex items-center">
                             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            {formatDateTime(incident.createdAt)}
+                            {formatDateTime(incident.reportedAt)}
                           </span>
                         </div>
-
-                        {incident.affectedAreas && incident.affectedAreas.length > 0 && (
-                          <div className="mt-3">
-                            <span className="text-sm font-medium text-gray-700 mr-2">Zones affectées:</span>
-                            <div className="inline-flex flex-wrap gap-1">
-                              {incident.affectedAreas.map((area, index) => (
-                                <span key={index} className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                  {area}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
 
                   {/* Actions for authorized users */}
-                  {canReportIncident && incident.status !== 'resolved' && (
+                  {canReportIncident && incident.status !== 'RESOLU' && (
                     <div className="mt-4 lg:mt-0 lg:ml-6 flex-shrink-0">
                       <div className="flex flex-col sm:flex-row lg:flex-col gap-2">
                         <button
-                          onClick={() => handleUpdateStatus(incident.id, 'resolved')}
+                          onClick={() => handleUpdateStatus(incident.id, 'RESOLU')}
                           className="px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors"
                         >
                           Marquer résolu
-                        </button>
-                        <button
-                          onClick={() => handleUpdateStatus(incident.id, 'investigating')}
-                          className="px-3 py-1.5 bg-yellow-600 text-white text-sm font-medium rounded-lg hover:bg-yellow-700 transition-colors"
-                        >
-                          En cours
                         </button>
                       </div>
                     </div>
@@ -642,20 +623,6 @@ export default function IncidentPage() {
               <form onSubmit={handleReportIncident} className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Titre de l'incident *
-                  </label>
-                  <input
-                    type="text"
-                    value={newIncident.title}
-                    onChange={(e) => setNewIncident({...newIncident, title: e.target.value})}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Ex: Mouvement de foule à l'entrée"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Description détaillée *
                   </label>
                   <textarea
@@ -679,29 +646,28 @@ export default function IncidentPage() {
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       required
                     >
-                      <option value="crowd">Mouvement de foule</option>
-                      <option value="technical">Problème technique</option>
-                      <option value="medical">Incident médical</option>
-                      <option value="security">Sécurité</option>
-                      <option value="weather">Météo</option>
-                      <option value="other">Autre</option>
+                      <option value="SECURITE">Sécurité</option>
+                      <option value="TECHNIQUE">Technique</option>
+                      <option value="MEDICAL">Médical</option>
+                      <option value="METEO">Météo</option>
+                      <option value="AUTRE">Autre</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Niveau de gravité *
+                      Niveau d'impact *
                     </label>
                     <select
-                      value={newIncident.severity}
-                      onChange={(e) => setNewIncident({...newIncident, severity: e.target.value as Incident['severity']})}
+                      value={newIncident.impactLevel}
+                      onChange={(e) => setNewIncident({...newIncident, impactLevel: e.target.value as Incident['impactLevel']})}
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       required
                     >
-                      <option value="low">Faible</option>
-                      <option value="medium">Moyenne</option>
-                      <option value="high">Élevée</option>
-                      <option value="critical">Critique</option>
+                      <option value="FAIBLE">Faible</option>
+                      <option value="MOYEN">Moyen</option>
+                      <option value="ELEVE">Élevé</option>
+                      <option value="CRITIQUE">Critique</option>
                     </select>
                   </div>
                 </div>
@@ -717,48 +683,6 @@ export default function IncidentPage() {
                     className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Ex: Entrée principale, Tribune Ouest, Zone de restauration..."
                     required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Événement concerné (optionnel)
-                  </label>
-                  <select
-                    value={newIncident.eventId}
-                    onChange={(e) => setNewIncident({...newIncident, eventId: e.target.value})}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Sélectionner un événement</option>
-                    {events.map(event => (
-                      <option key={event.id} value={event.id}>{event.name} - {event.location}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Zones affectées (optionnel)
-                  </label>
-                  <input
-                    type="text"
-                    value={newIncident.affectedAreas.join(', ')}
-                    onChange={(e) => setNewIncident({...newIncident, affectedAreas: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Séparez par des virgules: Zone A, Entrée Nord, Restauration..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Actions déjà prises (optionnel)
-                  </label>
-                  <textarea
-                    value={newIncident.actionTaken}
-                    onChange={(e) => setNewIncident({...newIncident, actionTaken: e.target.value})}
-                    rows={3}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Décrivez les mesures déjà mises en place..."
                   />
                 </div>
 
@@ -798,16 +722,16 @@ export default function IncidentPage() {
             <div className="p-6">
               <div className="flex justify-between items-start mb-6">
                 <div>
-                  <h3 className="text-xl font-semibold text-gray-900">{selectedIncident.title}</h3>
+                  <h3 className="text-xl font-semibold text-gray-900">Incident #{selectedIncident.id}</h3>
                   <div className="flex flex-wrap gap-2 mt-2">
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedIncident.status)}`}>
-                      {selectedIncident.status === 'active' ? 'Actif' : selectedIncident.status === 'investigating' ? 'En cours' : 'Résolu'}
+                      {getStatusLabel(selectedIncident.status)}
                     </span>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                       {getTypeLabel(selectedIncident.type)}
                     </span>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(selectedIncident.severity)}`}>
-                      {getSeverityLabel(selectedIncident.severity)}
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSeverityColor(selectedIncident.impactLevel)}`}>
+                      {getSeverityLabel(selectedIncident.impactLevel)}
                     </span>
                   </div>
                 </div>
@@ -835,16 +759,9 @@ export default function IncidentPage() {
                         <p className="text-sm text-gray-500">Localisation</p>
                         <p className="text-gray-900 font-medium">{selectedIncident.location}</p>
                       </div>
-                      {selectedIncident.eventName && (
-                        <div>
-                          <p className="text-sm text-gray-500">Événement</p>
-                          <p className="text-gray-900 font-medium">{selectedIncident.eventName}</p>
-                        </div>
-                      )}
                       <div>
                         <p className="text-sm text-gray-500">Déclaré par</p>
-                        <p className="text-gray-900 font-medium">{selectedIncident.reportedBy.name}</p>
-                        <p className="text-sm text-gray-600 capitalize">{selectedIncident.reportedBy.role}</p>
+                        <p className="text-gray-900 font-medium">{selectedIncident.reportedBy}</p>
                       </div>
                     </div>
                   </div>
@@ -856,12 +773,14 @@ export default function IncidentPage() {
                     <div className="space-y-2">
                       <div>
                         <p className="text-sm text-gray-500">Déclaré le</p>
-                        <p className="text-gray-900">{formatDateTime(selectedIncident.createdAt)}</p>
+                        <p className="text-gray-900">{formatDateTime(selectedIncident.reportedAt)}</p>
                       </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Dernière mise à jour</p>
-                        <p className="text-gray-900">{formatDateTime(selectedIncident.updatedAt)}</p>
-                      </div>
+                      {selectedIncident.updatedAt && (
+                        <div>
+                          <p className="text-sm text-gray-500">Dernière mise à jour</p>
+                          <p className="text-gray-900">{formatDateTime(selectedIncident.updatedAt)}</p>
+                        </div>
+                      )}
                       {selectedIncident.resolvedAt && (
                         <div>
                           <p className="text-sm text-gray-500">Résolu le</p>
@@ -870,49 +789,20 @@ export default function IncidentPage() {
                       )}
                     </div>
                   </div>
-
-                  {selectedIncident.affectedAreas && selectedIncident.affectedAreas.length > 0 && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Zones affectées</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedIncident.affectedAreas.map((area, index) => (
-                          <span key={index} className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
-                            {area}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
 
-                {selectedIncident.actionTaken && (
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2">Actions prises</h4>
-                    <p className="text-gray-600 bg-gray-50 p-4 rounded-lg">{selectedIncident.actionTaken}</p>
-                  </div>
-                )}
-
-                {canReportIncident && selectedIncident.status !== 'resolved' && (
+                {canReportIncident && selectedIncident.status !== 'RESOLU' && (
                   <div className="pt-6 border-t border-gray-200">
                     <h4 className="font-medium text-gray-900 mb-3">Mettre à jour le statut</h4>
                     <div className="flex space-x-3">
                       <button
                         onClick={() => {
-                          handleUpdateStatus(selectedIncident.id, 'resolved');
+                          handleUpdateStatus(selectedIncident.id, 'RESOLU');
                           setShowIncidentModal(false);
                         }}
                         className="px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors"
                       >
                         Marquer comme résolu
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleUpdateStatus(selectedIncident.id, 'investigating');
-                          setShowIncidentModal(false);
-                        }}
-                        className="px-4 py-2 bg-yellow-600 text-white font-medium rounded-lg hover:bg-yellow-700 transition-colors"
-                      >
-                        En cours d'investigation
                       </button>
                     </div>
                   </div>
