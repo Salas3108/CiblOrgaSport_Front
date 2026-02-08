@@ -28,13 +28,13 @@ const navigationItems: NavItem[] = [
     label: "Dashboard",
     href: "/",
     icon: BarChart3,
-    roles: ["admin", "official", "athlete", "spectator", "volunteer"]
+    roles: ["official", "athlete", "spectator", "volunteer"]
   },
   {
     label: "Events",
     href: "/AdminEvents",
     icon: Calendar,
-    roles: ["admin", "official", "athlete", "spectator", "volunteer"]
+    roles: ["official", "athlete", "spectator", "volunteer"]
   },
   {
     label: "Results",
@@ -46,7 +46,7 @@ const navigationItems: NavItem[] = [
     label: "Venues",
     href: "/venues",
     icon: MapPin,
-    roles: ["admin", "official", "athlete", "spectator", "volunteer"]
+    roles: ["admin", "official", "spectator", "volunteer"]
   },
   {
     label: "Security",

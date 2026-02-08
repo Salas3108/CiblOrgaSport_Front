@@ -19,12 +19,12 @@
       "prenom": "Marie",
       "dateNaissance": "2000-03-22",
       "pays": "Belgique",
-      "valide": false,
+      "valide": true,
       "docs": {
-        "certificatMedical": null,
+        "certificatMedical": "certificat_medical_marie.pdf",
         "passport": "passport_marie.pdf"
       },
-      "observation": "En attente du certificat médical"
+      "observation": "Athlète élite catégorie senior"
     },
     {
       "id": 3,
@@ -56,43 +56,69 @@
   "epreuves": [
     {
       "id": 101,
-      "nom": "100m Sprint",
-      "type": "Individuel",
-      "niveau": "Sénior",
+      "nom": "100m Sprint Hommes",
+      "typeEpreuve": "INDIVIDUELLE",
+      "niveauEpreuve": "QUALIFICATION",
+      "genreEpreuve": "MASCULIN",
       "date": "2026-02-10",
-      "heureDebut": "10:00",
-      "heureFin": "10:30",
+      "heureDebut": "09:00",
+      "heureFin": "10:00",
       "lieu": "Stade Olympique"
     },
     {
       "id": 102,
-      "nom": "Saut en longueur",
-      "type": "Individuel",
-      "niveau": "Sénior",
+      "nom": "Saut en longueur Femmes",
+      "typeEpreuve": "INDIVIDUELLE",
+      "niveauEpreuve": "DEMI_FINALE",
+      "genreEpreuve": "FEMININ",
       "date": "2026-02-10",
       "heureDebut": "10:15",
-      "heureFin": "11:00",
+      "heureFin": "11:15",
       "lieu": "Stade Olympique"
     },
     {
       "id": 103,
-      "nom": "Relais 4x100",
-      "type": "Collectif",
-      "niveau": "Sénior",
+      "nom": "Relais 4x100 Mixte",
+      "typeEpreuve": "COLLECTIVE",
+      "niveauEpreuve": "FINALE",
+      "genreEpreuve": "MIXTE",
       "date": "2026-02-11",
-      "heureDebut": "16:00",
-      "heureFin": "16:45",
+      "heureDebut": "14:00",
+      "heureFin": "15:00",
       "lieu": "Piste A"
     },
     {
       "id": 104,
-      "nom": "Marathon",
-      "type": "Individuel",
-      "niveau": "Sénior",
+      "nom": "Marathon Femmes",
+      "typeEpreuve": "INDIVIDUELLE",
+      "niveauEpreuve": "FINALE",
+      "genreEpreuve": "FEMININ",
       "date": "2026-02-12",
       "heureDebut": "08:00",
       "heureFin": "11:30",
       "lieu": "Parcours Ville"
+    },
+    {
+      "id": 105,
+      "nom": "400m Hommes",
+      "typeEpreuve": "INDIVIDUELLE",
+      "niveauEpreuve": "QUART_DE_FINALE",
+      "genreEpreuve": "MASCULIN",
+      "date": "2026-02-13",
+      "heureDebut": "15:00",
+      "heureFin": "16:00",
+      "lieu": "Stade Olympique"
+    },
+    {
+      "id": 106,
+      "nom": "Pentathlon Femmes",
+      "typeEpreuve": "INDIVIDUELLE",
+      "niveauEpreuve": "QUALIFICATION",
+      "genreEpreuve": "FEMININ",
+      "date": "2026-02-14",
+      "heureDebut": "09:00",
+      "heureFin": "14:00",
+      "lieu": "Complexe Sportif"
     }
   ],
   "athleteEpreuves": [
@@ -102,7 +128,7 @@
     },
     {
       "athleteId": 1,
-      "epreuveId": 102
+      "epreuveId": 105
     },
     {
       "athleteId": 1,
@@ -110,7 +136,27 @@
     },
     {
       "athleteId": 2,
+      "epreuveId": 102
+    },
+    {
+      "athleteId": 2,
       "epreuveId": 104
+    },
+    {
+      "athleteId": 2,
+      "epreuveId": 103
+    },
+    {
+      "athleteId": 3,
+      "epreuveId": 101
+    },
+    {
+      "athleteId": 3,
+      "epreuveId": 105
+    },
+    {
+      "athleteId": 4,
+      "epreuveId": 106
     }
   ],
   "messages": [],

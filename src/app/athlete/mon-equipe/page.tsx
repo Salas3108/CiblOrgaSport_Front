@@ -22,6 +22,18 @@ interface Equipe {
   categorie?: string
 }
 
+interface AthleteEpreuve {
+  id: number
+  nom: string
+  typeEpreuve: "INDIVIDUELLE" | "COLLECTIVE"
+  niveauEpreuve: "QUALIFICATION" | "QUART_DE_FINALE" | "DEMI_FINALE" | "FINALE"
+  genreEpreuve?: "FEMININ" | "MASCULIN" | "MIXTE"
+  date: string
+  heureDebut: string
+  heureFin: string
+  lieu: { id?: number; nom?: string } | string
+}
+
 const API_BASE_URL = "http://localhost:3001"
 
 // Use mock data by default; set NEXT_PUBLIC_USE_MOCK=false once backend is ready
@@ -50,15 +62,15 @@ function getUserIdFromStorage(): number {
   }
 }
 
-// Mock epreuves (example similar to "Mes épreuves") and derive a single team role
+// Mock epreuves (using backend enums: TypeEpreuve, NiveauEpreuve, GenreEpreuve)
 const MOCK_EPREUVES = [
-  { date: "2026-02-10", nom: "100m Sprint", heureDebut: "10:00", heureFin: "10:30", lieu: "Stade Olympique", type: "Individuel", niveau: "Sénior" },
-  { date: "2026-02-10", nom: "Saut en longueur", heureDebut: "10:15", heureFin: "11:00", lieu: "Stade Olympique", type: "Individuel", niveau: "Sénior" },
-  { date: "2026-02-11", nom: "Relais 4x100", heureDebut: "16:00", heureFin: "16:45", lieu: "Piste A", type: "Collectif", niveau: "Sénior" },
+  { date: "2026-02-10", nom: "100m Sprint", heureDebut: "10:00", heureFin: "10:30", lieu: "Stade Olympique", typeEpreuve: "INDIVIDUELLE" as const, niveauEpreuve: "DEMI_FINALE" as const, genreEpreuve: "MASCULIN" as const },
+  { date: "2026-02-10", nom: "Saut en longueur", heureDebut: "10:15", heureFin: "11:00", lieu: "Stade Olympique", typeEpreuve: "INDIVIDUELLE" as const, niveauEpreuve: "DEMI_FINALE" as const, genreEpreuve: "FEMININ" as const },
+  { date: "2026-02-11", nom: "Relais 4x100", heureDebut: "16:00", heureFin: "16:45", lieu: "Piste A", typeEpreuve: "COLLECTIVE" as const, niveauEpreuve: "FINALE" as const, genreEpreuve: "MIXTE" as const },
 ]
 
 function deriveEquipeRoleFromEpreuves(epreuves: any[]) {
-  if (epreuves.some(e => /relais|collectif/i.test(e.nom) || /collectif/i.test(e.type))) return "Relayeur"
+  if (epreuves.some(e => e.typeEpreuve === "COLLECTIVE" || /relais/i.test(e.nom))) return "Relayeur"
   if (epreuves.some(e => /100m|sprint/i.test(e.nom))) return "Sprinteur"
   if (epreuves.some(e => /saut|longueur/i.test(e.nom))) return "Sauteur"
   return "Athlète"

@@ -54,12 +54,13 @@ interface CommissaireMessage {
 interface AthleteEpreuve {
   id: number
   nom: string
-  type: string
-  niveau: string
+  typeEpreuve: "INDIVIDUELLE" | "COLLECTIVE"
+  niveauEpreuve: "QUALIFICATION" | "QUART_DE_FINALE" | "DEMI_FINALE" | "FINALE"
+  genreEpreuve?: "FEMININ" | "MASCULIN" | "MIXTE"
   date: string
   heureDebut: string
   heureFin: string
-  lieu: string
+  lieu: { id?: number; nom?: string } | string
 }
 
 interface Coequipier {
@@ -79,15 +80,43 @@ interface Equipe {
 
 const API_BASE_URL = "http://localhost:3001"
 
-// Mock epreuves (example similar to "Mes épreuves") and derive a single team role
-const MOCK_EPREUVES = [
-  { date: "2026-02-10", nom: "100m Sprint", heureDebut: "10:00", heureFin: "10:30", lieu: "Stade Olympique", type: "Individuel", niveau: "Sénior" },
-  { date: "2026-02-10", nom: "Saut en longueur", heureDebut: "10:15", heureFin: "11:00", lieu: "Stade Olympique", type: "Individuel", niveau: "Sénior" },
-  { date: "2026-02-11", nom: "Relais 4x100", heureDebut: "16:00", heureFin: "16:45", lieu: "Piste A", type: "Collectif", niveau: "Sénior" },
+// Mock epreuves (using backend enums: TypeEpreuve, NiveauEpreuve, GenreEpreuve)
+const MOCK_EPREUVES: AthleteEpreuve[] = [
+  { id: 1, date: "2026-02-10", nom: "100m Sprint", heureDebut: "10:00", heureFin: "10:30", lieu: "Stade Olympique", typeEpreuve: "INDIVIDUELLE" as const, niveauEpreuve: "DEMI_FINALE" as const, genreEpreuve: "MASCULIN" as const },
+  { id: 2, date: "2026-02-10", nom: "Saut en longueur", heureDebut: "10:15", heureFin: "11:00", lieu: "Stade Olympique", typeEpreuve: "INDIVIDUELLE" as const, niveauEpreuve: "DEMI_FINALE" as const, genreEpreuve: "FEMININ" as const },
+  { id: 3, date: "2026-02-11", nom: "Relais 4x100", heureDebut: "16:00", heureFin: "16:45", lieu: "Piste A", typeEpreuve: "COLLECTIVE" as const, niveauEpreuve: "FINALE" as const, genreEpreuve: "MIXTE" as const },
 ]
 
+function getTypeEpreuveLabel(type: string): string {
+  const labels: Record<string, string> = {
+    "INDIVIDUELLE": "Individuelle",
+    "COLLECTIVE": "Collective"
+  }
+  return labels[type] || type
+}
+
+function getNiveauEpreuveLabel(niveau: string): string {
+  const labels: Record<string, string> = {
+    "QUALIFICATION": "Qualification",
+    "QUART_DE_FINALE": "Quart de finale",
+    "DEMI_FINALE": "Demi-finale",
+    "FINALE": "Finale"
+  }
+  return labels[niveau] || niveau
+}
+
+function getGenreEpreuveLabel(genre: string | undefined): string {
+  if (!genre) return ""
+  const labels: Record<string, string> = {
+    "FEMININ": "Féminin",
+    "MASCULIN": "Masculin",
+    "MIXTE": "Mixte"
+  }
+  return labels[genre] || genre
+}
+
 function deriveEquipeRoleFromEpreuves(epreuves: any[]) {
-  if (epreuves.some(e => /relais|collectif/i.test(e.nom) || /collectif/i.test(e.type))) return "Relayeur"
+  if (epreuves.some(e => e.typeEpreuve === "COLLECTIVE" || /relais/i.test(e.nom))) return "Relayeur"
   if (epreuves.some(e => /100m|sprint/i.test(e.nom))) return "Sprinteur"
   if (epreuves.some(e => /saut|longueur/i.test(e.nom))) return "Sauteur"
   return "Athlète"
@@ -194,6 +223,11 @@ export default function AthletePage() {
       setEpreuvesLoading(true)
       setEpreuvesError(null)
 
+      if (USE_MOCK) {
+        setEpreuves(MOCK_EPREUVES)
+        return
+      }
+
       const response = await fetch(`/api/athletes/${id}/epreuves`)
       if (!response.ok) throw new Error("Erreur lors du chargement des épreuves")
 
@@ -202,7 +236,8 @@ export default function AthletePage() {
       setEpreuves(list)
     } catch (err) {
       setEpreuvesError(err instanceof Error ? err.message : "Erreur inconnue")
-      setEpreuves([])
+      // Fallback to mock when API fails
+      setEpreuves(MOCK_EPREUVES)
     } finally {
       setEpreuvesLoading(false)
     }
@@ -1129,12 +1164,15 @@ export default function AthletePage() {
                                             </span>
                                             <span className="flex items-center gap-1">
                                               <MapPin className="h-4 w-4" />
-                                              {epreuve.lieu}
+                                              {typeof epreuve.lieu === "string" ? epreuve.lieu : epreuve.lieu?.nom || "Non spécifié"}
                                             </span>
                                           </div>
                                           <div className="flex flex-wrap items-center gap-2 mt-2">
-                                            <Badge variant="outline">{epreuve.type}</Badge>
-                                            <Badge variant="secondary">{epreuve.niveau}</Badge>
+                                            <Badge variant="outline">{getTypeEpreuveLabel(epreuve.typeEpreuve)}</Badge>
+                                            <Badge variant="secondary">{getNiveauEpreuveLabel(epreuve.niveauEpreuve)}</Badge>
+                                            {epreuve.genreEpreuve && (
+                                              <Badge variant="outline">{getGenreEpreuveLabel(epreuve.genreEpreuve)}</Badge>
+                                            )}
                                             {overlap && (
                                               <Badge variant="destructive" className="flex items-center gap-1">
                                                 <AlertCircle className="h-3 w-3" />

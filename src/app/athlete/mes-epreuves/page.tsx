@@ -11,12 +11,41 @@ import db from "../db.json"
 interface AthleteEpreuve {
   id: number
   nom: string
-  type: string
-  niveau: string
+  typeEpreuve: "INDIVIDUELLE" | "COLLECTIVE"
+  niveauEpreuve: "QUALIFICATION" | "QUART_DE_FINALE" | "DEMI_FINALE" | "FINALE"
+  genreEpreuve?: "FEMININ" | "MASCULIN" | "MIXTE"
   date: string
   heureDebut: string
   heureFin: string
   lieu: string
+}
+
+function getTypeEpreuveLabel(type: string): string {
+  const labels: Record<string, string> = {
+    "INDIVIDUELLE": "Individuelle",
+    "COLLECTIVE": "Collective"
+  }
+  return labels[type] || type
+}
+
+function getNiveauEpreuveLabel(niveau: string): string {
+  const labels: Record<string, string> = {
+    "QUALIFICATION": "Qualification",
+    "QUART_DE_FINALE": "Quart de finale",
+    "DEMI_FINALE": "Demi-finale",
+    "FINALE": "Finale"
+  }
+  return labels[niveau] || niveau
+}
+
+function getGenreEpreuveLabel(genre: string | undefined): string {
+  if (!genre) return ""
+  const labels: Record<string, string> = {
+    "FEMININ": "Féminin",
+    "MASCULIN": "Masculin",
+    "MIXTE": "Mixte"
+  }
+  return labels[genre] || genre
 }
 
 
@@ -193,8 +222,11 @@ export default function MesEpreuvesPage() {
                                     </span>
                                   </div>
                                   <div className="flex flex-wrap items-center gap-2 mt-2">
-                                    <Badge variant="outline">{epreuve.type}</Badge>
-                                    <Badge variant="secondary">{epreuve.niveau}</Badge>
+                                    <Badge variant="outline">{getTypeEpreuveLabel(epreuve.typeEpreuve)}</Badge>
+                                    <Badge variant="secondary">{getNiveauEpreuveLabel(epreuve.niveauEpreuve)}</Badge>
+                                    {epreuve.genreEpreuve && (
+                                      <Badge variant="outline">{getGenreEpreuveLabel(epreuve.genreEpreuve)}</Badge>
+                                    )}
                                     {overlap && (
                                       <Badge variant="destructive" className="flex items-center gap-1">
                                         <AlertCircle className="h-3 w-3" />
