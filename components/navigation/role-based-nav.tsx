@@ -73,6 +73,12 @@ const navigationItems: NavItem[] = [
     roles: ["athlete"]
   },
   {
+    label: "Mon équipe",
+    href: "/athlete/mon-equipe",
+    icon: Users,
+    roles: ["athlete"]
+  },
+  {
     label: "Officials",
     href: "/official",
     icon: ClipboardCheck,
