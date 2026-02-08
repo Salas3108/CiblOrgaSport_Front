@@ -11,8 +11,6 @@ import {
   Calendar, 
   Clock, 
   MapPin, 
-  Trophy, 
-  TrendingUp, 
   User, 
   FileText, 
   Flag, 
@@ -23,8 +21,6 @@ import {
   Upload,
   Download,
   MessageSquare,
-  Mail,
-  Phone,
   Edit,
   Save,
   X
@@ -53,6 +49,17 @@ interface CommissaireMessage {
   lu: boolean
 }
 
+interface AthleteEpreuve {
+  id: number
+  nom: string
+  type: string
+  niveau: string
+  date: string
+  heureDebut: string
+  heureFin: string
+  lieu: string
+}
+
 const API_BASE_URL = "http://localhost:3001"
 
 export default function AthletePage() {
@@ -60,6 +67,10 @@ export default function AthletePage() {
   const [messages, setMessages] = useState<CommissaireMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const [epreuves, setEpreuves] = useState<AthleteEpreuve[]>([])
+  const [epreuvesLoading, setEpreuvesLoading] = useState(false)
+  const [epreuvesError, setEpreuvesError] = useState<string | null>(null)
   
   // États pour l'édition
   const [isEditing, setIsEditing] = useState(false)
@@ -115,12 +126,33 @@ export default function AthletePage() {
           setMessages(messagesData.messages || [])
         }
       }
+
+      await loadEpreuves(id)
       
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inconnue")
       console.error("Erreur:", err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadEpreuves = async (id: number) => {
+    try {
+      setEpreuvesLoading(true)
+      setEpreuvesError(null)
+
+      const response = await fetch(`/api/athletes/${id}/epreuves`)
+      if (!response.ok) throw new Error("Erreur lors du chargement des épreuves")
+
+      const data = await response.json()
+      const list = Array.isArray(data) ? data : data.epreuves || []
+      setEpreuves(list)
+    } catch (err) {
+      setEpreuvesError(err instanceof Error ? err.message : "Erreur inconnue")
+      setEpreuves([])
+    } finally {
+      setEpreuvesLoading(false)
     }
   }
 
@@ -334,6 +366,40 @@ export default function AthletePage() {
     setSelectedAthleteId(id)
     await loadAthlete(id)
   }
+
+  const getDateTime = (date: string, time: string) => {
+    return new Date(`${date}T${time}`)
+  }
+
+  const hasOverlap = (current: AthleteEpreuve, list: AthleteEpreuve[]) => {
+    if (!current.heureDebut || !current.heureFin) return false
+    const start = getDateTime(current.date, current.heureDebut).getTime()
+    const end = getDateTime(current.date, current.heureFin).getTime()
+
+    return list.some((other) => {
+      if (other.id === current.id) return false
+      if (other.date !== current.date) return false
+      if (!other.heureDebut || !other.heureFin) return false
+
+      const otherStart = getDateTime(other.date, other.heureDebut).getTime()
+      const otherEnd = getDateTime(other.date, other.heureFin).getTime()
+      return start < otherEnd && end > otherStart
+    })
+  }
+
+  const sortedEpreuves = [...epreuves].sort((a, b) => {
+    const aTime = getDateTime(a.date, a.heureDebut || "00:00").getTime()
+    const bTime = getDateTime(b.date, b.heureDebut || "00:00").getTime()
+    return aTime - bTime
+  })
+
+  const epreuvesByDate = sortedEpreuves.reduce<Record<string, AthleteEpreuve[]>>((acc, epreuve) => {
+    if (!acc[epreuve.date]) {
+      acc[epreuve.date] = []
+    }
+    acc[epreuve.date].push(epreuve)
+    return acc
+  }, {})
 
   if (loading) {
     return (
@@ -886,6 +952,99 @@ export default function AthletePage() {
                     </CardContent>
                   </Card>
                 </div>
+
+                {/* Mes épreuves */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Calendar className="h-5 w-5" />
+                      <span>Mes épreuves</span>
+                    </CardTitle>
+                    <CardDescription>
+                      Calendrier et détails des épreuves programmées
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {epreuvesLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="text-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                          <p className="mt-3 text-sm text-muted-foreground">Chargement des épreuves...</p>
+                        </div>
+                      </div>
+                    ) : epreuvesError ? (
+                      <div className="text-center py-8">
+                        <AlertCircle className="h-10 w-10 text-red-500 mx-auto" />
+                        <p className="mt-3 text-sm text-muted-foreground">{epreuvesError}</p>
+                        <Button onClick={() => loadEpreuves(athlete.id)} className="mt-4">
+                          Réessayer
+                        </Button>
+                      </div>
+                    ) : sortedEpreuves.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Calendar className="h-10 w-10 text-muted-foreground mx-auto" />
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          Aucune épreuve programmée pour le moment
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-8">
+                        {Object.entries(epreuvesByDate).map(([date, items]) => (
+                          <div key={date} className="space-y-4">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Calendar className="h-4 w-4" />
+                              <span>
+                                {new Date(date).toLocaleDateString("fr-FR", {
+                                  weekday: "long",
+                                  day: "numeric",
+                                  month: "long",
+                                  year: "numeric"
+                                })}
+                              </span>
+                            </div>
+                            <div className="relative border-l pl-6 space-y-4">
+                              {items.map((epreuve) => {
+                                const overlap = hasOverlap(epreuve, items)
+                                return (
+                                  <div key={epreuve.id} className="relative">
+                                    <div className="absolute -left-[9px] top-3 h-4 w-4 rounded-full border-2 border-primary bg-background"></div>
+                                    <div className={`rounded-lg border p-4 ${overlap ? "border-red-300 bg-red-50/50" : "bg-card"}`}>
+                                      <div className="flex items-start justify-between gap-4">
+                                        <div>
+                                          <h3 className="font-medium">{epreuve.nom}</h3>
+                                          <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-muted-foreground">
+                                            <span className="flex items-center gap-1">
+                                              <Clock className="h-4 w-4" />
+                                              {epreuve.heureDebut} - {epreuve.heureFin}
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                              <MapPin className="h-4 w-4" />
+                                              {epreuve.lieu}
+                                            </span>
+                                          </div>
+                                          <div className="flex flex-wrap items-center gap-2 mt-2">
+                                            <Badge variant="outline">{epreuve.type}</Badge>
+                                            <Badge variant="secondary">{epreuve.niveau}</Badge>
+                                            {overlap && (
+                                              <Badge variant="destructive" className="flex items-center gap-1">
+                                                <AlertCircle className="h-3 w-3" />
+                                                Chevauchement
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
                 {/* Messages du commissaire */}
                 <Card>

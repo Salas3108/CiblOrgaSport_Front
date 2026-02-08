@@ -53,6 +53,66 @@
       "observation": "Passeport expiré - demande de renouvellement"
     }
   ],
+  "epreuves": [
+    {
+      "id": 101,
+      "nom": "100m Sprint",
+      "type": "Individuel",
+      "niveau": "Sénior",
+      "date": "2026-02-10",
+      "heureDebut": "10:00",
+      "heureFin": "10:30",
+      "lieu": "Stade Olympique"
+    },
+    {
+      "id": 102,
+      "nom": "Saut en longueur",
+      "type": "Individuel",
+      "niveau": "Sénior",
+      "date": "2026-02-10",
+      "heureDebut": "10:15",
+      "heureFin": "11:00",
+      "lieu": "Stade Olympique"
+    },
+    {
+      "id": 103,
+      "nom": "Relais 4x100",
+      "type": "Collectif",
+      "niveau": "Sénior",
+      "date": "2026-02-11",
+      "heureDebut": "16:00",
+      "heureFin": "16:45",
+      "lieu": "Piste A"
+    },
+    {
+      "id": 104,
+      "nom": "Marathon",
+      "type": "Individuel",
+      "niveau": "Sénior",
+      "date": "2026-02-12",
+      "heureDebut": "08:00",
+      "heureFin": "11:30",
+      "lieu": "Parcours Ville"
+    }
+  ],
+  "athleteEpreuves": [
+    {
+      "athleteId": 1,
+      "epreuveId": 101
+    },
+    {
+      "athleteId": 1,
+      "epreuveId": 102
+    },
+    {
+      "athleteId": 1,
+      "epreuveId": 103
+    },
+    {
+      "athleteId": 2,
+      "epreuveId": 104
+    }
+  ],
   "messages": [],
   "logs": []
 }

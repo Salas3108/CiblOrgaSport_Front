@@ -7,8 +7,16 @@ const app = express();
 const PORT = 3001;
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 app.use(express.json());
+
+app.options("*", cors());
 
 // Chemin vers le fichier db.json
 const DB_PATH = path.join(__dirname, 'db.json');
@@ -155,6 +163,26 @@ app.get('/api/commissaire/athletes', (req, res) => {
   try {
     const db = readDB();
     res.json({ success: true, athletes: db.athletes });
+  } catch (error) {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// GET épreuves d'un athlète
+app.get('/athletes/:id/epreuves', (req, res) => {
+  try {
+    const db = readDB();
+    const athleteId = parseInt(req.params.id);
+
+    const links = db.athleteEpreuves || [];
+    const epreuves = db.epreuves || [];
+
+    const epreuveIds = links
+      .filter((item) => item.athleteId === athleteId)
+      .map((item) => item.epreuveId);
+
+    const result = epreuves.filter((epreuve) => epreuveIds.includes(epreuve.id));
+    res.json({ success: true, epreuves: result });
   } catch (error) {
     res.status(500).json({ error: 'Erreur serveur' });
   }

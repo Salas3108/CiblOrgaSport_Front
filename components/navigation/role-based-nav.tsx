@@ -67,6 +67,12 @@ const navigationItems: NavItem[] = [
     roles: ["athlete"]
   },
   {
+    label: "Mes épreuves",
+    href: "/athlete/mes-epreuves",
+    icon: Calendar,
+    roles: ["athlete"]
+  },
+  {
     label: "Officials",
     href: "/official",
     icon: ClipboardCheck,
