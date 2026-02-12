@@ -69,6 +69,7 @@ interface Coequipier {
   prenom: string
   pays: string
   role?: string
+  username?: string | null
 }
 
 interface Equipe {
@@ -78,7 +79,60 @@ interface Equipe {
   categorie?: string
 }
 
-const API_BASE_URL = "http://localhost:3001"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
+
+const getAuthHeaders = () => {
+  if (typeof window === "undefined") return { "Content-Type": "application/json" }
+  const token = localStorage.getItem("token") || localStorage.getItem("accessToken")
+  return token
+    ? { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }
+    : { "Content-Type": "application/json" }
+}
+
+const getUserIdFromToken = (): number | null => {
+  if (typeof window === "undefined") return null
+  const token = localStorage.getItem("token") || localStorage.getItem("accessToken")
+  if (!token) return null
+  try {
+    const payload = token.split(".")[1]
+    if (!payload) return null
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/")
+    const json = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    )
+    const data = JSON.parse(json)
+    const candidate = data.userId ?? data.id ?? data.sub
+    const n = Number(candidate)
+    if (!Number.isNaN(n) && Number.isFinite(n)) return Math.trunc(n)
+    return null
+  } catch {
+    return null
+  }
+}
+
+const getUsernameFromToken = (): string | null => {
+  if (typeof window === "undefined") return null
+  const token = localStorage.getItem("token") || localStorage.getItem("accessToken")
+  if (!token) return null
+  try {
+    const payload = token.split(".")[1]
+    if (!payload) return null
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/")
+    const json = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    )
+    const data = JSON.parse(json)
+    return data.sub || data.username || null
+  } catch {
+    return null
+  }
+}
 
 // Mock epreuves (using backend enums: TypeEpreuve, NiveauEpreuve, GenreEpreuve)
 const MOCK_EPREUVES: AthleteEpreuve[] = [
@@ -248,21 +302,20 @@ export default function AthletePage() {
       setEquipeLoading(true)
       setEquipeError(null)
 
-      const response = await fetch(`/api/athletes/${id}/equipe`)
+      const response = await fetch(`${API_BASE_URL}/api/athlete/${id}/equipe`, {
+        headers: getAuthHeaders()
+      })
       if (!response.ok) {
-        console.warn("Equipe endpoint not available, using mock data")
-        setEquipe(MOCK_EQUIPE)
+        setEquipe(null)
+        setEquipeError(null)
         return
       }
       const data = await response.json()
-      if (!data) {
-        setEquipe(MOCK_EQUIPE)
-      } else {
-        setEquipe(data)
-      }
+      const hasEquipe = data && data.id
+      setEquipe(hasEquipe ? data : null)
     } catch (err) {
-      setEquipeError(err instanceof Error ? err.message : "Erreur inconnue")
-      setEquipe(MOCK_EQUIPE)
+      setEquipeError(null)
+      setEquipe(null)
     } finally {
       setEquipeLoading(false)
     }
@@ -284,30 +337,46 @@ export default function AthletePage() {
   }
 
   useEffect(() => {
-    // Determine user id from stored user (set by AuthProvider) or fallback to 1
-    const getUserId = () => {
+    const parseLocalUserId = (): number | null => {
       try {
         const raw = localStorage.getItem("user")
-        if (!raw) return 1
+        if (!raw) return null
         const parsed = JSON.parse(raw)
         const candidate = parsed.id ?? parsed.userId ?? parsed.sub ?? parsed.spectatorId
-        const parseId = (c: any): number | null => {
-          if (c === undefined || c === null) return null
-          const n = Number(c)
-          if (!Number.isNaN(n) && Number.isFinite(n)) return Math.trunc(n)
-          const s = String(c)
-          const m = s.match(/(\d+)/)
-          if (m) return Number(m[1])
-          return null
-        }
-        const id = parseId(candidate)
-        return id ?? 1
-      } catch (e) {
-        return 1
+        const n = Number(candidate)
+        if (!Number.isNaN(n) && Number.isFinite(n)) return Math.trunc(n)
+        const s = String(candidate ?? "")
+        const m = s.match(/(\d+)/)
+        return m ? Number(m[1]) : null
+      } catch {
+        return null
       }
     }
-    const id = getUserId()
-    loadAthlete(id)
+
+    const loadForCurrentUser = async () => {
+      let id: number | null = null
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+          headers: getAuthHeaders()
+        })
+        if (response.ok) {
+          const data = await response.json()
+          id = Number(data?.id)
+        }
+      } catch {
+        id = null
+      }
+      if (!id || Number.isNaN(id)) {
+        id = getUserIdFromToken()
+      }
+      if (!id || Number.isNaN(id)) {
+        id = parseLocalUserId()
+      }
+      if (!id) id = 1
+      loadAthlete(id)
+    }
+
+    loadForCurrentUser()
   }, [])
 
   // Mettre à jour les informations de l'athlète
@@ -1250,7 +1319,14 @@ export default function AthletePage() {
                           </h4>
                           {equipe.members && equipe.members.length > 0 ? (
                             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1">
-                              {equipe.members.map((member) => (
+                              {equipe.members
+                                .filter((member) => {
+                                  const currentUsername = getUsernameFromToken()
+                                  if (member.id && athlete?.id && member.id === athlete.id) return false
+                                  if (currentUsername && member.username && member.username.toLowerCase() === currentUsername.toLowerCase()) return false
+                                  return true
+                                })
+                                .map((member) => (
                                 <div
                                   key={member.id}
                                   className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition"
@@ -1263,6 +1339,11 @@ export default function AthletePage() {
                                       <p className="font-medium">
                                         {member.prenom} {member.nom}
                                       </p>
+                                      {member.username && (
+                                        <p className="text-xs text-muted-foreground">
+                                          {member.username}
+                                        </p>
+                                      )}
                                       <p className="text-sm text-muted-foreground">
                                         {member.pays}
                                       </p>

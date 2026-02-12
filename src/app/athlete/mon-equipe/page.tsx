@@ -13,6 +13,7 @@ interface Coequipier {
   prenom: string
   pays: string
   role?: string
+  username?: string | null
 }
 
 interface Equipe {
@@ -22,110 +23,130 @@ interface Equipe {
   categorie?: string
 }
 
-interface AthleteEpreuve {
-  id: number
-  nom: string
-  typeEpreuve: "INDIVIDUELLE" | "COLLECTIVE"
-  niveauEpreuve: "QUALIFICATION" | "QUART_DE_FINALE" | "DEMI_FINALE" | "FINALE"
-  genreEpreuve?: "FEMININ" | "MASCULIN" | "MIXTE"
-  date: string
-  heureDebut: string
-  heureFin: string
-  lieu: { id?: number; nom?: string } | string
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
+
+const getAuthHeaders = () => {
+  if (typeof window === "undefined") return { "Content-Type": "application/json" }
+  const token = localStorage.getItem("token") || localStorage.getItem("accessToken")
+  return token
+    ? { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }
+    : { "Content-Type": "application/json" }
 }
 
-const API_BASE_URL = "http://localhost:3001"
-
-// Use mock data by default; set NEXT_PUBLIC_USE_MOCK=false once backend is ready
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false"
-
-function getUserIdFromStorage(): number {
-  if (typeof window === "undefined") return 1
+const getUserIdFromToken = (): number | null => {
+  if (typeof window === "undefined") return null
+  const token = localStorage.getItem("token") || localStorage.getItem("accessToken")
+  if (!token) return null
   try {
-    const raw = localStorage.getItem("user")
-    if (!raw) return 1
-    const parsed = JSON.parse(raw)
-    const candidate = parsed.id ?? parsed.userId ?? parsed.sub ?? parsed.spectatorId
-    const parseId = (c: any): number | null => {
-      if (c === undefined || c === null) return null
-      const n = Number(c)
-      if (!Number.isNaN(n) && Number.isFinite(n)) return Math.trunc(n)
-      const s = String(c)
-      const m = s.match(/(\d+)/)
-      if (m) return Number(m[1])
-      return null
-    }
-    const id = parseId(candidate)
-    return id ?? 1
-  } catch (e) {
-    return 1
+    const payload = token.split(".")[1]
+    if (!payload) return null
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/")
+    const json = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    )
+    const data = JSON.parse(json)
+    const candidate = data.userId ?? data.id ?? data.sub
+    const n = Number(candidate)
+    if (!Number.isNaN(n) && Number.isFinite(n)) return Math.trunc(n)
+    return null
+  } catch {
+    return null
   }
 }
 
-// Mock epreuves (using backend enums: TypeEpreuve, NiveauEpreuve, GenreEpreuve)
-const MOCK_EPREUVES = [
-  { date: "2026-02-10", nom: "100m Sprint", heureDebut: "10:00", heureFin: "10:30", lieu: "Stade Olympique", typeEpreuve: "INDIVIDUELLE" as const, niveauEpreuve: "DEMI_FINALE" as const, genreEpreuve: "MASCULIN" as const },
-  { date: "2026-02-10", nom: "Saut en longueur", heureDebut: "10:15", heureFin: "11:00", lieu: "Stade Olympique", typeEpreuve: "INDIVIDUELLE" as const, niveauEpreuve: "DEMI_FINALE" as const, genreEpreuve: "FEMININ" as const },
-  { date: "2026-02-11", nom: "Relais 4x100", heureDebut: "16:00", heureFin: "16:45", lieu: "Piste A", typeEpreuve: "COLLECTIVE" as const, niveauEpreuve: "FINALE" as const, genreEpreuve: "MIXTE" as const },
-]
-
-function deriveEquipeRoleFromEpreuves(epreuves: any[]) {
-  if (epreuves.some(e => e.typeEpreuve === "COLLECTIVE" || /relais/i.test(e.nom))) return "Relayeur"
-  if (epreuves.some(e => /100m|sprint/i.test(e.nom))) return "Sprinteur"
-  if (epreuves.some(e => /saut|longueur/i.test(e.nom))) return "Sauteur"
-  return "Athlète"
+const getUsernameFromToken = (): string | null => {
+  if (typeof window === "undefined") return null
+  const token = localStorage.getItem("token") || localStorage.getItem("accessToken")
+  if (!token) return null
+  try {
+    const payload = token.split(".")[1]
+    if (!payload) return null
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/")
+    const json = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    )
+    const data = JSON.parse(json)
+    return data.sub || data.username || null
+  } catch {
+    return null
+  }
 }
 
-const derivedRole = deriveEquipeRoleFromEpreuves(MOCK_EPREUVES)
-
-// Mock équipe used until backend is ready — members share the same derived role
-const MOCK_EQUIPE: Equipe = {
-  id: 999,
-  nom: "Team Demo",
-  categorie: "Senior Mixte",
-  members: [
-    { id: 1, prenom: "Alice", nom: "Dupont", pays: "France", role: derivedRole },
-    { id: 2, prenom: "Marc", nom: "Leroy", pays: "France", role: derivedRole },
-    { id: 3, prenom: "Sofia", nom: "Ivanova", pays: "Russie", role: derivedRole }
-  ]
+function getUserIdFromStorage(): number | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = localStorage.getItem("user")
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    const candidate = parsed.id ?? parsed.userId ?? parsed.sub ?? parsed.spectatorId
+    const n = Number(candidate)
+    if (!Number.isNaN(n) && Number.isFinite(n)) return Math.trunc(n)
+    const s = String(candidate ?? "")
+    const m = s.match(/(\d+)/)
+    return m ? Number(m[1]) : null
+  } catch {
+    return null
+  }
 }
 
 export default function MonEquipePage() {
   const [equipe, setEquipe] = useState<Equipe | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [athleteId, setAthleteId] = useState<number>(1)
 
   useEffect(() => {
-    const id = getUserIdFromStorage()
-    loadEquipe(id)
+    const loadForCurrentUser = async () => {
+      let id: number | null = null
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+          headers: getAuthHeaders()
+        })
+        if (response.ok) {
+          const data = await response.json()
+          id = Number(data?.id)
+        }
+      } catch {
+        id = null
+      }
+      if (!id || Number.isNaN(id)) {
+        id = getUserIdFromToken()
+      }
+      if (!id || Number.isNaN(id)) {
+        id = getUserIdFromStorage()
+      }
+      if (!id) id = 1
+      setAthleteId(id)
+      loadEquipe(id)
+    }
+
+    loadForCurrentUser()
   }, [])
 
   const loadEquipe = async (id: number) => {
     try {
       setLoading(true)
       setError(null)
-      if (USE_MOCK) {
-        setEquipe(MOCK_EQUIPE)
-        return
-      }
-      const res = await fetch(`${API_BASE_URL}/api/athletes/${id}/equipe`)
+      const res = await fetch(`${API_BASE_URL}/api/athlete/${id}/equipe`, {
+        headers: getAuthHeaders()
+      })
       if (!res.ok) {
-        // Backend not ready / endpoint missing — use mock data for now
-        console.warn("Equipe endpoint not available, using mock data")
-        setEquipe(MOCK_EQUIPE)
+        setEquipe(null)
+        setError(null)
         return
       }
       const data = await res.json()
-      // If backend returns empty / individual athlete, fallback to mock (or null)
-      if (!data) {
-        setEquipe(MOCK_EQUIPE)
-      } else {
-        setEquipe(data)
-      }
+      const hasEquipe = data && data.id
+      setEquipe(hasEquipe ? data : null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erreur inconnue")
-      // Use mock data when fetch fails
-      setEquipe(MOCK_EQUIPE)
+      setError(null)
+      setEquipe(null)
     } finally {
       setLoading(false)
     }
@@ -147,7 +168,7 @@ export default function MonEquipePage() {
               <div className="text-center py-8">
                 <AlertCircle className="h-10 w-10 text-red-500 mx-auto" />
                 <p className="mt-3 text-sm text-muted-foreground">{error}</p>
-                <Button onClick={() => loadEquipe(1)} className="mt-4">Réessayer</Button>
+                <Button onClick={() => loadEquipe(athleteId)} className="mt-4">Réessayer</Button>
               </div>
             ) : !equipe ? (
               <div className="text-center py-8">
@@ -170,7 +191,14 @@ export default function MonEquipePage() {
                   <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Coéquipiers ({equipe.members?.length || 0})</h4>
                   {equipe.members && equipe.members.length > 0 ? (
                     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1">
-                      {equipe.members.map((member) => (
+                      {equipe.members
+                        .filter((member) => {
+                          const currentUsername = getUsernameFromToken()
+                          if (member.id && athleteId && member.id === athleteId) return false
+                          if (currentUsername && member.username && member.username.toLowerCase() === currentUsername.toLowerCase()) return false
+                          return true
+                        })
+                        .map((member) => (
                         <div key={member.id} className="flex items-center justify-between p-4 border rounded-lg">
                           <div className="flex items-center gap-3 flex-1">
                             <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
@@ -178,6 +206,9 @@ export default function MonEquipePage() {
                             </div>
                             <div>
                               <p className="font-medium">{member.prenom} {member.nom}</p>
+                              {member.username && (
+                                <p className="text-xs text-muted-foreground">{member.username}</p>
+                              )}
                               <p className="text-sm text-muted-foreground">{member.pays}</p>
                             </div>
                           </div>
