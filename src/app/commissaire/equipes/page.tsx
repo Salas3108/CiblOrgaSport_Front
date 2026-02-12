@@ -236,22 +236,6 @@ export default function CommissaireEquipesPage() {
             </div>
           </div>
 
-          <div className="border-b">
-            <nav className="flex gap-6">
-              <Link
-                href="/commissaire"
-                className="pb-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-              >
-                Athletes
-              </Link>
-              <Link
-                href="/commissaire/equipes"
-                className="border-b-2 border-primary pb-2 text-sm font-medium text-primary"
-              >
-                Gestion d'equipe
-              </Link>
-            </nav>
-          </div>
 
           <Card>
             <CardHeader>

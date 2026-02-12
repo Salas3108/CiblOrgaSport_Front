@@ -282,22 +282,6 @@ export default function OfficialPage() {
               </div>
             </div>
 
-            <div className="border-b">
-              <nav className="flex gap-6">
-                <Link
-                  href="/commissaire"
-                  className="border-b-2 border-primary pb-2 text-sm font-medium text-primary"
-                >
-                  Athletes
-                </Link>
-                <Link
-                  href="/commissaire/equipes"
-                  className="pb-2 text-sm font-medium text-muted-foreground hover:text-foreground"
-                >
-                  Gestion d'equipe
-                </Link>
-              </nav>
-            </div>
 
             {/* Statistiques */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

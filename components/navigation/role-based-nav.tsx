@@ -85,6 +85,18 @@ const navigationItems: NavItem[] = [
     roles: ["official"]
   },
   {
+    label: "Validation athlètes",
+    href: "/commissaire",
+    icon: ClipboardCheck,
+    roles: ["commissaire"]
+  },
+  {
+    label: "Assignation équipes",
+    href: "/commissaire/equipes",
+    icon: Users,
+    roles: ["commissaire"]
+  },
+  {
     label: "Volunteers",
     href: "/volunteer",
     icon: Heart,
