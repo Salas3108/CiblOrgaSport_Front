@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import { Header } from "@/components/header"
+import Link from "next/link"
 //import { ProtectedRoute } from "@/components/auth/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -38,11 +39,13 @@ import { toast } from "sonner"
 
 interface Athlete {
   id: number
+  username?: string | null
   nom: string
   prenom: string
   dateNaissance: string
   pays: string
   valide: boolean
+  equipeNom?: string | null
   docs: {
     certificatMedical: string | null
     passport: string | null
@@ -50,7 +53,15 @@ interface Athlete {
   observation: string
 }
 
-const API_BASE_URL = "http://localhost:3001"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
+
+const getAuthHeaders = () => {
+  if (typeof window === "undefined") return { "Content-Type": "application/json" }
+  const token = localStorage.getItem("token") || localStorage.getItem("accessToken")
+  return token
+    ? { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }
+    : { "Content-Type": "application/json" }
+}
 
 export default function OfficialPage() {
   const [athletes, setAthletes] = useState<Athlete[]>([])
@@ -70,29 +81,60 @@ export default function OfficialPage() {
     refused: 0
   })
 
+  const getEquipeLabel = (athlete: Athlete) => athlete.equipeNom?.trim() ? athlete.equipeNom : "Individuel"
+  const getAthleteDisplayName = (athlete: Athlete) => {
+    const fullName = `${athlete.prenom ?? ""} ${athlete.nom ?? ""}`.trim()
+    if (fullName) return fullName
+    return athlete.username?.trim() || "Athlete"
+  }
+
+  const enrichAthletesWithUsername = async (items: Athlete[]) => {
+    const enriched = await Promise.all(items.map(async (athlete) => {
+      if (athlete.username) return athlete
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/user/${athlete.id}`, {
+          headers: getAuthHeaders()
+        })
+        if (!response.ok) return athlete
+        const data = await response.json()
+        return { ...athlete, username: data?.username || athlete.username }
+      } catch {
+        return athlete
+      }
+    }))
+    return enriched
+  }
+
   // Charger tous les athlètes
   const fetchAthletes = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes`)
+      const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes`, {
+        headers: getAuthHeaders()
+      })
       if (!response.ok) throw new Error("Erreur lors du chargement des athlètes")
       
       const data = await response.json()
-      if (data.success && data.athletes) {
-        setAthletes(data.athletes)
-        
-        // Calculer les statistiques
-        const total = data.athletes.length
-        const validated = data.athletes.filter((a: Athlete) => a.valide).length
-        const pending = data.athletes.filter((a: Athlete) => !a.valide).length
-        
-        setStats({
-          total,
-          validated,
-          pending,
-          refused: 0 // À ajuster si vous avez un champ spécifique pour les refus
-        })
-      }
+      const athletesData: Athlete[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.athletes)
+          ? data.athletes
+          : []
+
+      const enriched = await enrichAthletesWithUsername(athletesData)
+      setAthletes(enriched)
+
+      // Calculer les statistiques
+      const total = enriched.length
+      const validated = enriched.filter((a: Athlete) => a.valide).length
+      const pending = enriched.filter((a: Athlete) => !a.valide).length
+
+      setStats({
+        total,
+        validated,
+        pending,
+        refused: 0 // À ajuster si vous avez un champ spécifique pour les refus
+      })
     } catch (error) {
       toast.error("Erreur de chargement des athlètes")
       console.error(error)
@@ -107,9 +149,11 @@ export default function OfficialPage() {
 
   // Filtrer les athlètes
   const filteredAthletes = athletes.filter(athlete => {
-    const fullName = `${athlete.prenom} ${athlete.nom}`.toLowerCase()
+    const fullName = getAthleteDisplayName(athlete).toLowerCase()
+    const equipeLabel = getEquipeLabel(athlete).toLowerCase()
     const matchesSearch = fullName.includes(searchTerm.toLowerCase()) || 
-                         athlete.pays.toLowerCase().includes(searchTerm.toLowerCase())
+               athlete.pays.toLowerCase().includes(searchTerm.toLowerCase()) ||
+               equipeLabel.includes(searchTerm.toLowerCase())
     
     if (filterStatus === "all") return matchesSearch
     if (filterStatus === "validated") return matchesSearch && athlete.valide
@@ -123,7 +167,7 @@ export default function OfficialPage() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/commissaire/validation`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           id: athleteId,
           valide,
@@ -158,7 +202,7 @@ export default function OfficialPage() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/commissaire/message`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           id: selectedAthlete.id,
           message: messageContent.trim()
@@ -182,7 +226,9 @@ export default function OfficialPage() {
   // Ouvrir les documents d'un athlète
   const handleViewDocuments = async (athleteId: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/doc/${athleteId}`)
+      const response = await fetch(`${API_BASE_URL}/api/commissaire/doc/${athleteId}`, {
+        headers: getAuthHeaders()
+      })
       if (!response.ok) throw new Error("Erreur lors du chargement des documents")
       
       const data = await response.json()
@@ -234,6 +280,23 @@ export default function OfficialPage() {
                   Commissaire
                 </Badge>
               </div>
+            </div>
+
+            <div className="border-b">
+              <nav className="flex gap-6">
+                <Link
+                  href="/commissaire"
+                  className="border-b-2 border-primary pb-2 text-sm font-medium text-primary"
+                >
+                  Athletes
+                </Link>
+                <Link
+                  href="/commissaire/equipes"
+                  className="pb-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+                >
+                  Gestion d'equipe
+                </Link>
+              </nav>
             </div>
 
             {/* Statistiques */}
@@ -353,10 +416,10 @@ export default function OfficialPage() {
                                 </div>
                                 <div>
                                   <div className="font-medium">
-                                    {athlete.prenom} {athlete.nom}
+                                    {getAthleteDisplayName(athlete)}
                                   </div>
                                   <div className="text-sm text-muted-foreground">
-                                    {athlete.pays} • {athlete.dateNaissance}
+                                    {athlete.pays} • {athlete.dateNaissance} • {getEquipeLabel(athlete)}
                                   </div>
                                 </div>
                               </div>
@@ -422,11 +485,15 @@ export default function OfficialPage() {
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <Label className="text-sm text-muted-foreground">Nom</Label>
-                              <div className="font-medium">{selectedAthlete.nom}</div>
+                              <div className="font-medium">{selectedAthlete.nom || "-"}</div>
                             </div>
                             <div>
                               <Label className="text-sm text-muted-foreground">Prénom</Label>
-                              <div className="font-medium">{selectedAthlete.prenom}</div>
+                              <div className="font-medium">{selectedAthlete.prenom || "-"}</div>
+                            </div>
+                            <div>
+                              <Label className="text-sm text-muted-foreground">Username</Label>
+                              <div className="font-medium">{selectedAthlete.username || "-"}</div>
                             </div>
                             <div>
                               <Label className="text-sm text-muted-foreground">Date de naissance</Label>
@@ -438,6 +505,10 @@ export default function OfficialPage() {
                                 <Flag className="h-4 w-4" />
                                 {selectedAthlete.pays}
                               </div>
+                            </div>
+                            <div>
+                              <Label className="text-sm text-muted-foreground">Équipe</Label>
+                              <div className="font-medium">{getEquipeLabel(selectedAthlete)}</div>
                             </div>
                           </div>
                           
