@@ -97,6 +97,12 @@ const navigationItems: NavItem[] = [
     roles: ["commissaire"]
   },
   {
+    label: "Assignation épreuves",
+    href: "/commissaire/epreuves",
+    icon: Trophy,
+    roles: ["commissaire"]
+  },
+  {
     label: "Volunteers",
     href: "/volunteer",
     icon: Heart,
