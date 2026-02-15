@@ -9,9 +9,9 @@ import { User, Users, AlertCircle } from "lucide-react"
 
 interface Coequipier {
   id: number
-  nom: string
-  prenom: string
-  pays: string
+  nom?: string
+  prenom?: string
+  pays?: string
   role?: string
   username?: string | null
 }
@@ -19,8 +19,9 @@ interface Coequipier {
 interface Equipe {
   id: number
   nom: string
-  members: Coequipier[]
+  pays?: string
   categorie?: string
+  athleteIdUsernameMap?: Record<number, string>
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
@@ -138,19 +139,28 @@ export default function MonEquipePage() {
       })
       if (!res.ok) {
         setEquipe(null)
-        setError(null)
+        setError("Impossible de charger l'équipe")
         return
       }
       const data = await res.json()
-      const hasEquipe = data && data.id
-      setEquipe(hasEquipe ? data : null)
+      setEquipe(data && data.id ? data : null)
     } catch (err) {
-      setError(null)
+      setError("Erreur réseau")
       setEquipe(null)
     } finally {
       setLoading(false)
     }
   }
+
+  // Génère la liste des coéquipiers à partir de la map
+  const coequipiers: Coequipier[] = equipe && equipe.athleteIdUsernameMap
+    ? Object.entries(equipe.athleteIdUsernameMap)
+        .map(([id, username]) => ({
+          id: Number(id),
+          username
+        }))
+        .filter(member => member.id !== athleteId) // exclure soi-même
+    : []
 
   return (
     <div>
@@ -188,28 +198,19 @@ export default function MonEquipePage() {
                 </div>
 
                 <div className="space-y-3">
-                  <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Coéquipiers ({equipe.members?.length || 0})</h4>
-                  {equipe.members && equipe.members.length > 0 ? (
+                  <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                    Coéquipiers ({coequipiers.length})
+                  </h4>
+                  {coequipiers.length > 0 ? (
                     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1">
-                      {equipe.members
-                        .filter((member) => {
-                          const currentUsername = getUsernameFromToken()
-                          if (member.id && athleteId && member.id === athleteId) return false
-                          if (currentUsername && member.username && member.username.toLowerCase() === currentUsername.toLowerCase()) return false
-                          return true
-                        })
-                        .map((member) => (
+                      {coequipiers.map(member => (
                         <div key={member.id} className="flex items-center justify-between p-4 border rounded-lg">
                           <div className="flex items-center gap-3 flex-1">
                             <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
                               <User className="h-5 w-5 text-primary" />
                             </div>
                             <div>
-                              <p className="font-medium">{member.prenom} {member.nom}</p>
-                              {member.username && (
-                                <p className="text-xs text-muted-foreground">{member.username}</p>
-                              )}
-                              <p className="text-sm text-muted-foreground">{member.pays}</p>
+                              <p className="font-medium">{member.username ?? "Inconnu"}</p>
                             </div>
                           </div>
                           <Badge variant={member.role ? "secondary" : "outline"} className="ml-2">

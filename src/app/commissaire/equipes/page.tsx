@@ -12,11 +12,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Users, Flag, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
+// Interface mise à jour pour correspondre au backend
 interface Equipe {
   id: number
   nom: string
   pays: string
-  athleteIds: number[]
+  // Ancien format (gardé pour compatibilité)
+  athleteIds?: number[]
+  // Nouveau format du backend
+  athleteIdUsernameMap?: Record<number, string>
 }
 
 interface Athlete {
@@ -50,6 +54,19 @@ export default function CommissaireEquipesPage() {
   const [newEquipeNom, setNewEquipeNom] = useState("")
   const [newEquipePays, setNewEquipePays] = useState("")
 
+  // Fonction utilitaire pour compter les athlètes
+  const getAthleteCount = (equipe: Equipe): number => {
+    // Nouveau format (athleteIdUsernameMap)
+    if (equipe.athleteIdUsernameMap) {
+      return Object.keys(equipe.athleteIdUsernameMap).length
+    }
+    // Ancien format (athleteIds) pour compatibilité
+    if (equipe.athleteIds && Array.isArray(equipe.athleteIds)) {
+      return equipe.athleteIds.length
+    }
+    return 0
+  }
+
   const fetchEquipes = async () => {
     try {
       setLoading(true)
@@ -59,6 +76,10 @@ export default function CommissaireEquipesPage() {
       if (!response.ok) throw new Error("Erreur lors du chargement des equipes")
 
       const data = await response.json()
+      
+      // Log pour debug - à supprimer en production
+      console.log("Données reçues:", data)
+      
       const equipesData: Equipe[] = Array.isArray(data)
         ? data
         : Array.isArray(data?.equipes)
@@ -138,7 +159,11 @@ export default function CommissaireEquipesPage() {
         headers: getAuthHeaders(),
         body: JSON.stringify({ athleteIds: [Number(selectedAthleteId)] })
       })
-      if (!response.ok) throw new Error("Erreur lors de l'assignation")
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("Erreur réponse:", errorText)
+        throw new Error("Erreur lors de l'assignation")
+      }
 
       toast.success("Athlete assigne avec succes")
       setSelectedAthleteId("")
@@ -151,7 +176,6 @@ export default function CommissaireEquipesPage() {
       setAssigning(false)
     }
   }
-
 
   const handleCreateEquipe = async () => {
     if (!newEquipeNom.trim() || !newEquipePays.trim()) {
@@ -236,7 +260,6 @@ export default function CommissaireEquipesPage() {
             </div>
           </div>
 
-
           <Card>
             <CardHeader>
               <CardTitle>Creer une equipe</CardTitle>
@@ -285,7 +308,7 @@ export default function CommissaireEquipesPage() {
                     <SelectContent>
                       {equipes.map((equipe) => (
                         <SelectItem key={equipe.id} value={String(equipe.id)}>
-                          {equipe.nom}
+                          {equipe.nom} ({getAthleteCount(equipe)} athlète{getAthleteCount(equipe) > 1 ? 's' : ''})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -357,35 +380,51 @@ export default function CommissaireEquipesPage() {
                     <TableRow>
                       <TableHead>Nom</TableHead>
                       <TableHead>Pays</TableHead>
-                      <TableHead>Athletes</TableHead>
+                      <TableHead>Athlètes</TableHead>
                       <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredEquipes.map((equipe) => (
-                      <TableRow key={equipe.id}>
-                        <TableCell className="font-medium">{equipe.nom}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Flag className="h-4 w-4" />
-                            {equipe.pays}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {equipe.athleteIds?.length ?? 0}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDeleteEquipe(equipe)}
-                            disabled={deletingId === equipe.id}
-                          >
-                            {deletingId === equipe.id ? "Suppression..." : "Supprimer"}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filteredEquipes.map((equipe) => {
+                      const athleteCount = getAthleteCount(equipe)
+                      return (
+                        <TableRow key={equipe.id}>
+                          <TableCell className="font-medium">{equipe.nom}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Flag className="h-4 w-4" />
+                              {equipe.pays}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{athleteCount}</span>
+                              {equipe.athleteIdUsernameMap && athleteCount > 0 && (
+                                <Badge 
+                                  variant="outline" 
+                                  className="cursor-help text-xs"
+                                  title={Object.entries(equipe.athleteIdUsernameMap)
+                                    .map(([id, username]) => `ID ${id}: ${username || 'Sans username'}`)
+                                    .join('\n')}
+                                >
+                                  👥
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDeleteEquipe(equipe)}
+                              disabled={deletingId === equipe.id}
+                            >
+                              {deletingId === equipe.id ? "Suppression..." : "Supprimer"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               )}
