@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Trophy, ClipboardCheck, Heart, Settings, Eye, ArrowRight } from "lucide-react"
+import Link from "next/link"
 
 const userTypes = [
   {
@@ -94,9 +95,14 @@ export function UserTypeCards() {
                   ))}
                 </ul>
 
-                <Button className="w-full group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                  Access Dashboard
-                  <ArrowRight className="h-4 w-4 ml-2" />
+                <Button
+                  className="w-full group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                  asChild
+                >
+                  <Link href={type.href}>
+                    Access Dashboard
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Link>
                 </Button>
               </CardContent>
             </Card>

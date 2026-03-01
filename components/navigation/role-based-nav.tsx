@@ -103,9 +103,9 @@ const navigationItems: NavItem[] = [
     roles: ["commissaire"]
   },
   {
-    label: "Volunteers",
+    label: "Mon programme",
     href: "/volunteer",
-    icon: Heart,
+    icon: Calendar,
     roles: ["volunteer"]
   },
   {
