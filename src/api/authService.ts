@@ -18,6 +18,21 @@ export async function fetchAthletes(validated?: boolean) {
   return res.json();
 }
 
+// Récupérer la liste des volontaires (ADMIN)
+export async function fetchVolunteers(validated?: boolean) {
+  const token = localStorage.getItem('token');
+  let url = 'http://localhost:8080/auth/admin/volunteers';
+  if (validated !== undefined) url += `?validated=${validated}`;
+  const res = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!res.ok) throw new Error('Erreur API');
+  return res.json();
+}
+
 // Valider ou rejeter un athlète (ADMIN)
 export async function adminValidateAthlete(payload: { username: string; validated: boolean }) {
   const token = localStorage.getItem('token');
@@ -46,6 +61,10 @@ export async function adminValidateAthlete(payload: { username: string; validate
 
   return data;
 }
+
+
+// Valider ou rejeter un volontaire (ADMIN) - utilise la même endpoint que les athlètes
+// adminValidateAthlete est utilisée pour valider les volontaires aussi
 
 export const login = (payload: { username: string; password: string }) =>
   http.post(`${base}/auth/login`, payload).then((r: AxiosResponse<any>) => r.data);
@@ -103,7 +122,7 @@ export const adminValidateVolunteer = async (data: {
   accreditation?: string;
   affectation?: string;
 }) => {
-  const response = await fetch('/api/admin/validate-volunteer', {
+  const response = await fetch('http://localhost:8080/auth/admin/validate-volunteer', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
