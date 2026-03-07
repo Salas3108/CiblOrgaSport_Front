@@ -5,10 +5,11 @@ import EventManagement from "@/src/components/admin/EventManagement"
 import LieuManagement from "@/src/components/admin/LieuManagement"
 import ListeAthletes from "@/src/components/admin/ListeAthletes"
 import VolunteerProgramImport from "@/src/components/admin/VolunteerProgramImport"
+import { Users } from "lucide-react"
 import { useState } from "react"
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'lieux' | 'volunteer-programs'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'lieux' | 'volunteers'>('users');
 
   return (
     <div className="min-h-screen bg-background">
@@ -18,7 +19,7 @@ export default function AdminPage() {
           {/* Admin Header */}
           <div>
             <h1 className="text-3xl font-bold">Administration Dashboard</h1>
-            <p className="text-muted-foreground">Gestion des utilisateurs, événements et lieux</p>
+            <p className="text-muted-foreground">Gestion des utilisateurs, événements, lieux et volontaires</p>
           </div>
 
           {/* Navigation Tabs */}
@@ -55,14 +56,15 @@ export default function AdminPage() {
                 Gestion des Lieux
               </button>
               <button
-                onClick={() => setActiveTab('volunteer-programs')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'volunteer-programs'
-                    ? 'border-blue-500 text-blue-600'
+                onClick={() => setActiveTab('volunteers')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                  activeTab === 'volunteers'
+                    ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                Programmes volontaires
+                <Users className="h-4 w-4" />
+                Gestion des Volontaires
               </button>
             </nav>
           </div>
@@ -76,7 +78,7 @@ export default function AdminPage() {
             )}
             {activeTab === 'events' && <EventManagement />}
             {activeTab === 'lieux' && <LieuManagement />}
-            {activeTab === 'volunteer-programs' && <VolunteerProgramImport />}
+            {activeTab === 'volunteers' && <VolunteerProgramImport />}
           </div>
         </div>
       </main>

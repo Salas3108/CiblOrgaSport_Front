@@ -1,8 +1,8 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { fetchAthletes, adminValidateAthlete } from '@/src/api/authService';
+import { fetchAthletes, fetchVolunteers, adminValidateAthlete } from '@/src/api/authService';
 
-interface Athlete {
+interface User {
   id: number;
   username: string;
   email: string;
@@ -11,53 +11,82 @@ interface Athlete {
   [key: string]: any;
 }
 
+interface TabConfig {
+  id: 'athletes' | 'volunteers';
+  label: string;
+  title: string;
+  subtitle: string;
+  fetchFn: (validated?: boolean) => Promise<User[]>;
+  singularName: string;
+}
 
 function UserValidation() {
-  const [athletes, setAthletes] = useState<Athlete[]>([]);
+  const [activeTab, setActiveTab] = useState<'athletes' | 'volunteers'>('athletes');
+  const [users, setUsers] = useState<User[]>([]);
   const [validatedFilter, setValidatedFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [validatingUser, setValidatingUser] = useState<number | null>(null);
 
-  useEffect(() => {
-    loadAthletes();
-  }, [validatedFilter]);
+  const tabConfigs: Record<'athletes' | 'volunteers', TabConfig> = {
+    athletes: {
+      id: 'athletes',
+      label: 'Athlètes',
+      title: 'Gestion des Athlètes',
+      subtitle: 'Liste et validation des athlètes',
+      fetchFn: fetchAthletes,
+      singularName: 'athlète'
+    },
+    volunteers: {
+      id: 'volunteers',
+      label: 'Volontaires',
+      title: 'Gestion des Volontaires',
+      subtitle: 'Liste et validation des volontaires',
+      fetchFn: fetchVolunteers,
+      singularName: 'volontaire'
+    }
+  };
 
-  const loadAthletes = async () => {
+  const currentConfig = tabConfigs[activeTab];
+
+  useEffect(() => {
+    loadUsers();
+  }, [validatedFilter, activeTab]);
+
+  const loadUsers = async () => {
     setLoading(true);
-    // Ne pas effacer le message d'erreur ou de succès ici
     try {
       let validatedParam: boolean | undefined = undefined;
       if (validatedFilter === 'true') validatedParam = true;
       if (validatedFilter === 'false') validatedParam = false;
-      const users = await fetchAthletes(validatedParam);
-      setAthletes(users);
+      const userData = await currentConfig.fetchFn(validatedParam);
+      setUsers(userData || []);
     } catch (error) {
-      setError('Erreur lors du chargement des athlètes');
+      setError(`Erreur lors du chargement des ${currentConfig.label.toLowerCase()}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleValidateAthlete = async (athlete: Athlete, validated: boolean) => {
-    setValidatingUser(athlete.id);
+  const handleValidateUser = async (user: User, validated: boolean) => {
+    setValidatingUser(user.id);
     setError(null);
     try {
-      const response = await adminValidateAthlete({ username: athlete.username, validated });
+      const response = await adminValidateAthlete({ username: user.username, validated });
       console.log('Réponse validation:', response);
       // Si l'API retourne explicitement une erreur métier dans le corps
       if (response && (response.error || response.status === 'error')) {
-        setError(response.message || response.error || `Échec de la validation de l'athlète ${athlete.username}`);
+        setError(response.message || response.error || `Échec de la validation du ${currentConfig.singularName} ${user.username}`);
         setTimeout(() => setError(null), 3500);
       } else {
-        setSuccess(`Validation de l'athlète ${athlete.username} réussie.`);
-        await loadAthletes();
+        setSuccess(`Validation du ${currentConfig.singularName} ${user.username} réussie.`);
+        await loadUsers();
         setTimeout(() => setSuccess(null), 2500);
       }
     } catch (error: any) {
       // Si l'erreur est un objet avec un message
-      setError(error?.message || `Échec de la validation de l'athlète ${athlete.username}`);
+      setError(error?.message || `Échec de la validation du ${currentConfig.singularName} ${user.username}`);
       setTimeout(() => setError(null), 3500);
     } finally {
       setValidatingUser(null);
@@ -76,8 +105,11 @@ function UserValidation() {
 
   const getRoleDisplay = (role: string) => {
     switch(role) {
+      case 'VOLONTAIRE':
       case 'volunteer': return 'Volontaire';
+      case 'COMMISSAIRE':
       case 'official': return 'Commissaire';
+      case 'ATHLETE':
       case 'athlete': return 'Athlète';
       default: return role;
     }
@@ -85,8 +117,11 @@ function UserValidation() {
 
   const getRoleColor = (role: string) => {
     switch(role) {
+      case 'VOLONTAIRE':
       case 'volunteer': return 'bg-green-100 text-green-800';
+      case 'COMMISSAIRE':
       case 'official': return 'bg-blue-100 text-blue-800';
+      case 'ATHLETE':
       case 'athlete': return 'bg-purple-100 text-purple-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -98,7 +133,7 @@ function UserValidation() {
         <div className="flex justify-center items-center h-64">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-            <p className="text-gray-600">Chargement des athlètes...</p>
+            <p className="text-gray-600">Chargement des {currentConfig.label.toLowerCase()}...</p>
           </div>
         </div>
       </div>
@@ -107,26 +142,47 @@ function UserValidation() {
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6">
+      {/* Onglets */}
+      <div className="border-b border-gray-200 pb-4 mb-8">
+        <div className="flex gap-8">
+          {Object.values(tabConfigs).map((config) => (
+            <button
+              key={config.id}
+              onClick={() => {
+                setActiveTab(config.id);
+                setValidatedFilter('all');
+              }}
+              className={`pb-2 px-1 font-medium transition-colors border-b-2 ${
+                activeTab === config.id
+                  ? 'text-blue-600 border-blue-600'
+                  : 'text-gray-600 border-transparent hover:text-gray-900'
+              }`}
+            >
+              {config.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="border-b border-gray-200 pb-6 mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Gestion des Athlètes</h1>
-            <p className="mt-2 text-gray-600">Liste et validation des athlètes</p>
+            <h1 className="text-3xl font-bold text-gray-900">{currentConfig.title}</h1>
+            <p className="mt-2 text-gray-600">{currentConfig.subtitle}</p>
           </div>
           <div className="mt-4 sm:mt-0 flex items-center space-x-3">
             <button
-              onClick={loadAthletes}
+              onClick={loadUsers}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
             >
               Actualiser
             </button>
             <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
-              {athletes.length} athlètes
+              {users.length} {currentConfig.label.toLowerCase()}
             </span>
           </div>
         </div>
       </div>
-
 
       {success && (
         <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -162,7 +218,7 @@ function UserValidation() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Filtrer par validation</h3>
-            <p className="text-sm text-gray-500">Afficher les athlètes validés ou non</p>
+            <p className="text-sm text-gray-500">Afficher les {currentConfig.label.toLowerCase()} validés ou non</p>
           </div>
           <div className="mt-4 sm:mt-0">
             <div className="inline-flex rounded-lg shadow-sm" role="group">
@@ -187,49 +243,49 @@ function UserValidation() {
         </div>
       </div>
 
-      {/* Liste des athlètes */}
+      {/* Liste des utilisateurs */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        {athletes.length === 0 ? (
+        {users.length === 0 ? (
           <div className="text-center py-16">
             <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
               <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5 0c-.966 0-1.75.79-1.75 1.764s.784 1.764 1.75 1.764 1.75-.79 1.75-1.764S20.466 17 19.5 17z" />
               </svg>
             </div>
-            <h4 className="text-lg font-medium text-gray-900 mb-2">Aucun athlète trouvé</h4>
+            <h4 className="text-lg font-medium text-gray-900 mb-2">Aucun {currentConfig.singularName} trouvé</h4>
             <p className="text-gray-500 max-w-sm mx-auto">
               {validatedFilter === 'all' 
-                ? "Aucun athlète disponible." 
-                : `Aucun athlète ${validatedFilter === 'true' ? 'validé' : 'non validé'}.`}
+                ? `Aucun ${currentConfig.singularName} disponible.` 
+                : `Aucun ${currentConfig.singularName} ${validatedFilter === 'true' ? 'validé' : 'non validé'}.`}
             </p>
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {athletes.map((athlete) => (
-              <div key={athlete.id} className="p-6 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            {users.map((user) => (
+              <div key={user.id} className="p-6 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h4 className="text-lg font-semibold text-gray-900">{athlete.username}</h4>
-                  <div className="text-sm text-gray-600">{athlete.email}</div>
-                  <div className="text-xs text-gray-500">ID: {athlete.id}</div>
-                  <div className="text-xs text-gray-500">Validé : {athlete.validated ? 'Oui' : 'Non'}</div>
+                  <h4 className="text-lg font-semibold text-gray-900">{user.username}</h4>
+                  <div className="text-sm text-gray-600">{user.email}</div>
+                  <div className="text-xs text-gray-500">ID: {user.id}</div>
+                  <div className="text-xs text-gray-500">Validé : {user.validated ? 'Oui' : 'Non'}</div>
                 </div>
                 <div className="mt-4 sm:mt-0 flex gap-2">
-                  {!athlete.validated && (
+                  {!user.validated && (
                     <button
-                      onClick={() => handleValidateAthlete(athlete, true)}
-                      disabled={validatingUser === athlete.id}
+                      onClick={() => handleValidateUser(user, true)}
+                      disabled={validatingUser === user.id}
                       className="inline-flex items-center justify-center px-4 py-2.5 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {validatingUser === athlete.id ? 'Validation...' : 'Valider'}
+                      {validatingUser === user.id ? 'Validation...' : 'Valider'}
                     </button>
                   )}
-                  {athlete.validated && (
+                  {user.validated && (
                     <button
-                      onClick={() => handleValidateAthlete(athlete, false)}
-                      disabled={validatingUser === athlete.id}
+                      onClick={() => handleValidateUser(user, false)}
+                      disabled={validatingUser === user.id}
                       className="inline-flex items-center justify-center px-4 py-2.5 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {validatingUser === athlete.id ? 'Rejet...' : 'Rejeter'}
+                      {validatingUser === user.id ? 'Rejet...' : 'Rejeter'}
                     </button>
                   )}
                 </div>

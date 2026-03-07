@@ -133,12 +133,31 @@ export function LoginForm() {
       devLog("[LoginForm] Response status:", res.status)
 
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}))
+        let errBody: any = {}
+        const contentType = res.headers.get("content-type") || ""
+        
+        try {
+          if (contentType.includes("application/json")) {
+            errBody = await res.json()
+          } else {
+            // Si c'est du texte brut, l'utiliser comme message
+            const text = await res.text()
+            if (text) errBody.message = text
+          }
+        } catch {
+          // Ignore parse errors
+        }
+        
         if (process.env.NODE_ENV === "development") {
           // eslint-disable-next-line no-console
           console.error("[LoginForm] Error response body:", errBody)
         }
-        throw new Error(errBody?.message || "Authentication failed")
+        const errorMessage = errBody?.message || errBody?.detail || errBody?.error || `Authentication failed (HTTP ${res.status})`
+        if (process.env.NODE_ENV === "development") {
+          // eslint-disable-next-line no-console
+          console.error("[LoginForm] Full error details:", { status: res.status, errBody, errorMessage })
+        }
+        throw new Error(errorMessage)
       }
 
       const { token, user, type } = await res.json()
