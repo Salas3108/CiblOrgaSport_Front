@@ -15,6 +15,7 @@ const OFFLINE_THRESHOLD_MS = 30_000; // 30 secondes
 
 interface AthleteMarkerProps {
   athleteId: number;
+  name?: string;
   position: WebSocketPositionMessage | null;
   /** Timestamp de la dernière mise à jour (ms epoch). Null si jamais reçu. */
   lastUpdateMs: number | null;
@@ -47,6 +48,7 @@ function createAthleteIcon(isOffline: boolean): L.DivIcon {
 
 export default function AthleteMarker({
   athleteId,
+  name,
   position,
   lastUpdateMs,
   onClick,
@@ -70,7 +72,7 @@ export default function AthleteMarker({
       eventHandlers={{ click: onClick }}
     >
       <Tooltip direction="top" offset={[0, -14]} permanent={false}>
-        <span className="font-semibold">Athlète #{athleteId}</span>
+        <span className="font-semibold">{name ?? `Athlète #${athleteId}`}</span>
         {isOffline && (
           <span className="ml-2 text-red-500 text-xs">⚠ Hors ligne</span>
         )}

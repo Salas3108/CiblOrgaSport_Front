@@ -3,9 +3,9 @@
 import type { ReactNode } from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useState } from "react"
+import AthleteGpsTracker from "@/components/providers/AthleteGpsTracker"
 
 export default function ClientProviders({ children }: { children: ReactNode }) {
-  // QueryClient isolé par instance (recommandé Next.js App Router)
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -20,6 +20,7 @@ export default function ClientProviders({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <AthleteGpsTracker />
       {children}
     </QueryClientProvider>
   )

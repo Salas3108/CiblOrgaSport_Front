@@ -6,9 +6,19 @@
 
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useAthletePositions } from '@/hooks/useAthletePositions';
 import PositionHistoryPanel from '@/components/athlete/PositionHistoryPanel';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080';
+
+function getAuthHeaders(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const token = localStorage.getItem('token') ?? localStorage.getItem('accessToken') ?? '';
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+type AthleteNames = Map<number, string>;
 
 // Import dynamique (Leaflet ne supporte pas SSR)
 const MapComponent = dynamic(() => import('@/components/map/MapComponent'), { ssr: false });
@@ -36,6 +46,18 @@ function CartePage() {
   const { positions, isConnected, error } = useAthletePositions(athleteIds);
   const [historyAthleteId, setHistoryAthleteId] = useState<number | null>(null);
   const [hoveredAthleteId, setHoveredAthleteId] = useState<number | null>(null);
+  const [athleteNames, setAthleteNames] = useState<AthleteNames>(new Map());
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/commissaire/athletes`, { headers: getAuthHeaders() })
+      .then((r) => r.json())
+      .then((data: { id: number; nom: string; prenom: string }[]) => {
+        const map: AthleteNames = new Map();
+        data.forEach((a) => map.set(a.id, `${a.prenom} ${a.nom}`));
+        setAthleteNames(map);
+      })
+      .catch(() => { /* noms non disponibles, fallback sur ID */ });
+  }, []);
 
   // Calcule le timestamp epoch de la dernière mise à jour par athlète
   const lastUpdateMs = useMemo(() => {
@@ -75,6 +97,7 @@ function CartePage() {
               <AthleteMarker
                 key={id}
                 athleteId={id}
+                name={athleteNames.get(id)}
                 position={pos}
                 lastUpdateMs={lastUpdateMs.get(id) ?? null}
                 onClick={() => setHistoryAthleteId(id)}
@@ -123,7 +146,7 @@ function CartePage() {
                     `}
                   />
                   <span className="font-semibold text-sm text-white">
-                    Athlète #{id}
+                    {athleteNames.get(id) ?? `Athlète #${id}`}
                   </span>
                   {offline && (
                     <span className="ml-auto text-xs text-red-400 font-medium">
