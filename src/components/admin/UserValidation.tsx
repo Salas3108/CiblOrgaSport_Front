@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { fetchAthletes, fetchVolunteers, adminValidateAthlete } from '@/src/api/authService';
+import { fetchAthletes, fetchVolunteers, adminValidateAthlete, createAthleteProfile } from '@/src/api/authService';
 
 interface User {
   id: number;
@@ -80,7 +80,18 @@ function UserValidation() {
         setError(response.message || response.error || `Échec de la validation du ${currentConfig.singularName} ${user.username}`);
         setTimeout(() => setError(null), 3500);
       } else {
-        setSuccess(`Validation du ${currentConfig.singularName} ${user.username} réussie.`);
+        if (activeTab === 'athletes' && validated) {
+          try {
+            await createAthleteProfile(user.id, user.username);
+            setSuccess(`Validation de l'athlète ${user.username} réussie et profil créé.`);
+          } catch (profileError: any) {
+            setError(`Athlète validé, mais échec de création du profil: ${profileError?.message || 'Erreur inconnue'}`);
+            setTimeout(() => setError(null), 4500);
+            setSuccess(`Validation de l'athlète ${user.username} réussie.`);
+          }
+        } else {
+          setSuccess(`Validation du ${currentConfig.singularName} ${user.username} réussie.`);
+        }
         await loadUsers();
         setTimeout(() => setSuccess(null), 2500);
       }
