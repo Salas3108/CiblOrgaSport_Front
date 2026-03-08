@@ -1,198 +1,171 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 
 type StoredUser = {
   username?: string
   email?: string
   role?: string
-  uiRole?: string
   name?: string
   authenticated?: boolean
-  type?: string
 }
 
-type DebugInfo = {
-  authBase: string | null
-  username: string | undefined
-  tokenExists: boolean
-  requestUrl: string | null
-  error: string | null
-  response: any
+const ROLE_LABELS: Record<string, { label: string; color: string }> = {
+  ADMIN: { label: "Administrateur", color: "bg-red-100 text-red-700" },
+  COMMISSAIRE: { label: "Commissaire", color: "bg-purple-100 text-purple-700" },
+  ATHLETE: { label: "Athlète", color: "bg-blue-100 text-blue-700" },
+  VOLUNTEER: { label: "Volontaire", color: "bg-green-100 text-green-700" },
+  SPECTATOR: { label: "Spectateur", color: "bg-gray-100 text-gray-700" },
+}
+
+function getAuthHeaders() {
+  if (typeof window === "undefined") return {}
+  const token = localStorage.getItem("token") ?? localStorage.getItem("accessToken") ?? ""
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+function getUsernameFromToken(jwt?: string | null): string | undefined {
+  if (!jwt) return undefined
+  const parts = jwt.split(".")
+  if (parts.length < 2) return undefined
+  try {
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")))
+    return (
+      payload?.preferred_username ||
+      payload?.username ||
+      (typeof payload?.sub === "string" ? payload.sub : undefined) ||
+      (typeof payload?.email === "string" ? payload.email.split("@")[0] : undefined)
+    )
+  } catch {
+    return undefined
+  }
 }
 
 export default function ProfilePage() {
   const [user, setUser] = useState<StoredUser | null>(null)
-  const [tokenPreview, setTokenPreview] = useState<string | null>(null)
-  const [loading, setLoading] = useState<boolean>(true)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [debugInfo, setDebugInfo] = useState<DebugInfo>({
-    authBase: null,
-    username: undefined,
-    tokenExists: false,
-    requestUrl: null,
-    error: null,
-    response: null
-  })
-  const [showDebug, setShowDebug] = useState(false)
 
-  const loadProfile = async () => {
-    setLoading(true)
-    setError(null)
-    
-    try {
-      // Use gateway for auth requests to avoid CORS issues
-      const authBase = "http://localhost:8080"
+  // Photo state
+  const [photo, setPhoto] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-      const getUsernameFromToken = (jwt?: string | null): string | undefined => {
-        if (!jwt) return undefined
-        const parts = jwt.split(".")
-        if (parts.length < 2) return undefined
-        try {
-          const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")))
-          return (
-            payload?.preferred_username ||
-            payload?.username ||
-            (typeof payload?.sub === "string" ? payload.sub : undefined) ||
-            (typeof payload?.email === "string" ? payload.email.split("@")[0] : undefined)
-          )
-        } catch {
-          return undefined
-        }
-      }
+  // Edit state
+  const [editingDisplayName, setEditingDisplayName] = useState(false)
+  const [displayName, setDisplayName] = useState("")
+  const [bio, setBio] = useState("")
+  const [editingBio, setEditingBio] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
 
-      const safeParse = (raw: string | null): any => {
-        if (!raw) return null
-        try {
-          return JSON.parse(raw)
-        } catch {
-          return null
-        }
-      }
+  // Load photo + display name from localStorage
+  useEffect(() => {
+    const savedPhoto = localStorage.getItem("profile_photo")
+    const savedName = localStorage.getItem("profile_display_name")
+    const savedBio = localStorage.getItem("profile_bio")
+    if (savedPhoto) setPhoto(savedPhoto)
+    if (savedBio) setBio(savedBio)
+    if (savedName) setDisplayName(savedName)
+  }, [])
 
-      const getStored = () => {
-        if (typeof window === "undefined") return { token: null, username: undefined }
-        const lsUser = localStorage.getItem("user") || localStorage.getItem("userInfo")
-        const ssUser = sessionStorage.getItem("user") || sessionStorage.getItem("userInfo")
-        const parsedUser = safeParse(lsUser) || safeParse(ssUser)
-
+  useEffect(() => {
+    async function loadProfile() {
+      setLoading(true)
+      setError(null)
+      try {
         const token =
           localStorage.getItem("token") ||
           localStorage.getItem("accessToken") ||
           sessionStorage.getItem("token") ||
           sessionStorage.getItem("accessToken")
 
-        const username: string | undefined =
-          (parsedUser?.username as string | undefined) ||
-          (parsedUser?.user?.username as string | undefined) ||
-          getUsernameFromToken(token)
+        if (!token) {
+          setUser({ authenticated: false })
+          setError("Aucun jeton trouvé. Veuillez vous reconnecter.")
+          return
+        }
 
-        return { token, username }
-      }
+        const username = getUsernameFromToken(token)
+        if (!username) {
+          setUser({ authenticated: false })
+          setError("Impossible de déterminer l'utilisateur.")
+          return
+        }
 
-      const { token, username } = getStored()
-      setTokenPreview(token ? `${token.slice(0, 8)}...` : null)
+        const res = await fetch(
+          `http://localhost:8080/auth/user/username/${encodeURIComponent(username)}`,
+          { headers: getAuthHeaders() }
+        )
 
-      setDebugInfo(prev => ({
-        ...prev,
-        authBase,
-        username,
-        tokenExists: !!token,
-        requestUrl: null,
-        error: null,
-        response: null
-      }))
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
 
-      if (!token) {
+        const data = await res.json()
+        const u: StoredUser = {
+          authenticated: true,
+          username: data?.username || username,
+          email: data?.email,
+          role: data?.role,
+          name: data?.username || username,
+        }
+        setUser(u)
+        // Init display name if not set
+        const saved = localStorage.getItem("profile_display_name")
+        if (!saved) setDisplayName(u.username ?? "")
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Erreur inconnue"
+        setError(`Impossible de charger le profil: ${msg}`)
         setUser({ authenticated: false })
-        setError("Aucun jeton trouvé. Veuillez vous reconnecter.")
-        setDebugInfo(prev => ({ ...prev, error: "No token found" }))
-        return
+      } finally {
+        setLoading(false)
       }
-
-      if (!username) {
-        setUser({ authenticated: false })
-        setError("Impossible de déterminer l'utilisateur à partir du jeton.")
-        setDebugInfo(prev => ({ ...prev, error: "No username found" }))
-        return
-      }
-
-      if (!authBase) {
-        setUser({ authenticated: false })
-        setError("Configuration manquante: NEXT_PUBLIC_AUTH_BASE et aucun fallback disponible.")
-        setDebugInfo(prev => ({ ...prev, error: "No auth base URL" }))
-        return
-      }
-
-      const encodedUsername = encodeURIComponent(username.toString().trim())
-      if (!encodedUsername) {
-        setUser({ authenticated: false })
-        setError("Nom d'utilisateur vide ou invalide.")
-        setDebugInfo(prev => ({ ...prev, error: "Empty or invalid username" }))
-        return
-      }
-
-      const requestUrl = `${authBase}/auth/user/username/${encodedUsername}`
-      
-      setDebugInfo(prev => ({
-        ...prev,
-        requestUrl
-      }))
-
-      const response = await fetch(requestUrl!, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        setDebugInfo(prev => ({ 
-          ...prev, 
-          error: `HTTP ${response.status}: ${errorText}`,
-          response: { status: response.status, text: errorText }
-        }))
-        throw new Error(`HTTP ${response.status}: ${errorText}`)
-      }
-
-      const data = await response.json()
-      
-      setDebugInfo(prev => ({ ...prev, response: data }))
-
-      setUser({
-        authenticated: true,
-        username: data?.username || username,
-        email: data?.email,
-        role: data?.role,
-        uiRole: data?.role,
-        name: data?.username || username,
-        type: "Bearer",
-      })
-      setError(null)
-
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Unknown error"
-      setError(`Impossible de charger le profil: ${errorMessage}`)
-      setUser({ authenticated: false })
-      setDebugInfo(prev => ({ ...prev, error: errorMessage }))
-    } finally {
-      setLoading(false)
     }
-  }
-
-  useEffect(() => {
     loadProfile()
   }, [])
 
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string
+      setPhoto(dataUrl)
+      localStorage.setItem("profile_photo", dataUrl)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  function saveDisplayName() {
+    localStorage.setItem("profile_display_name", displayName)
+    setEditingDisplayName(false)
+    showSaved()
+  }
+
+  function saveBio() {
+    localStorage.setItem("profile_bio", bio)
+    setEditingBio(false)
+    showSaved()
+  }
+
+  function showSaved() {
+    setSaveSuccess(true)
+    setTimeout(() => setSaveSuccess(false), 2000)
+  }
+
+  function removePhoto() {
+    setPhoto(null)
+    localStorage.removeItem("profile_photo")
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  const roleInfo = user?.role ? (ROLE_LABELS[user.role] ?? { label: user.role, color: "bg-gray-100 text-gray-700" }) : null
+  const initials = (user?.username ?? "?").slice(0, 2).toUpperCase()
+
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto p-4">
-        <div className="text-center py-8">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <p className="mt-2 text-gray-600">Chargement du profil…</p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-500">Chargement du profil…</p>
         </div>
       </div>
     )
@@ -200,207 +173,243 @@ export default function ProfilePage() {
 
   if (!user?.authenticated) {
     return (
-      <div className="max-w-2xl mx-auto p-4">
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            </div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 max-w-sm w-full text-center space-y-4">
+          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto">
+            <span className="text-3xl">🔒</span>
           </div>
-        )}
-        
-        <div className="flex flex-wrap gap-3 mb-6">
+          <h2 className="text-lg font-semibold text-gray-900">Non authentifié</h2>
+          <p className="text-sm text-gray-500">{error ?? "Veuillez vous reconnecter."}</p>
           <Link href="/login">
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+            <button className="w-full py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors">
               Se connecter
             </button>
           </Link>
-          <button 
-            onClick={loadProfile}
-            className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-          >
-            Réessayer
-          </button>
-          <button 
-            onClick={() => setShowDebug(!showDebug)}
-            className="px-4 py-2 text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-          >
-            {showDebug ? "Masquer le debug" : "Afficher le debug"}
-          </button>
         </div>
-
-        {showDebug && (
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-              <h3 className="text-sm font-medium text-gray-900">Informations de débogage</h3>
-            </div>
-            <div className="p-4 space-y-3 text-sm bg-white">
-              <div className="grid grid-cols-3 gap-2">
-                <div className="font-medium text-gray-700">Auth Base:</div>
-                <div className="col-span-2 font-mono text-gray-900">{debugInfo.authBase || "Non défini"}</div>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="font-medium text-gray-700">Username:</div>
-                <div className="col-span-2 font-mono text-gray-900">{debugInfo.username || "Non trouvé"}</div>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="font-medium text-gray-700">Token existe:</div>
-                <div className="col-span-2">
-                  <span className={`px-2 py-1 rounded-full text-xs ${debugInfo.tokenExists ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                    {debugInfo.tokenExists ? "Oui" : "Non"}
-                  </span>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="font-medium text-gray-700">URL de requête:</div>
-                <div className="col-span-2 font-mono text-gray-900 break-all">{debugInfo.requestUrl || "Non générée"}</div>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="font-medium text-gray-700">Erreur:</div>
-                <div className="col-span-2">
-                  {debugInfo.error ? (
-                    <span className="font-mono text-red-600">{debugInfo.error}</span>
-                  ) : (
-                    <span className="text-gray-500">Aucune</span>
-                  )}
-                </div>
-              </div>
-              {debugInfo.response && (
-                <div>
-                  <div className="font-medium text-gray-700 mb-2">Réponse:</div>
-                  <pre className="mt-1 p-3 bg-gray-50 border border-gray-200 rounded text-xs overflow-auto max-h-64">
-                    {JSON.stringify(debugInfo.response, null, 2)}
-                  </pre>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     )
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Profil utilisateur</h2>
-          <p className="mt-1 text-sm text-gray-600">Informations de votre compte</p>
-        </div>
-        
-        <div className="p-6 space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Nom d'utilisateur</div>
-              <div className="text-lg font-medium text-gray-900">{user?.username || "-"}</div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Nom affiché</div>
-              <div className="text-lg font-medium text-gray-900">{user?.name || user?.username || "-"}</div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Email</div>
-              <div className="text-lg font-medium text-gray-900 flex items-center">
-                {user?.email || "-"}
-                {user?.email && (
-                  <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">Vérifié</span>
-                )}
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Rôle (backend)</div>
-              <div className="text-lg font-medium text-gray-900">
-                <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">
-                  {user?.role || "-"}
-                </span>
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Rôle (UI)</div>
-              <div className="text-lg font-medium text-gray-900">
-                <span className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm">
-                  {user?.uiRole || "-"}
-                </span>
-              </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Type de token</div>
-              <div className="text-lg font-medium text-gray-900">
-                <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-                  {user?.type || "-"}
-                </span>
-              </div>
-            </div>
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="max-w-2xl mx-auto space-y-4">
+
+        {/* Save feedback */}
+        {saveSuccess && (
+          <div className="fixed top-20 right-4 z-50 bg-green-600 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg animate-fade-in">
+            ✓ Enregistré
           </div>
-          
-          <div className="pt-4 border-t border-gray-200">
-            <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Token d'accès</div>
-            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <code className="text-sm font-mono text-gray-700">
-                {tokenPreview || "Aucun token"}
-              </code>
-              <button 
-                onClick={() => setShowDebug(!showDebug)}
-                className="text-xs text-gray-500 hover:text-gray-700"
+        )}
+
+        {/* Profile card */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+
+          {/* Banner */}
+          <div className="h-24 bg-gradient-to-r from-blue-500 to-indigo-600" />
+
+          {/* Avatar + basic info */}
+          <div className="px-6 pb-6">
+            <div className="flex items-end gap-4 -mt-12 mb-4">
+              {/* Avatar */}
+              <div className="relative shrink-0">
+                <div className="w-24 h-24 rounded-2xl border-4 border-white shadow-md overflow-hidden bg-blue-100 flex items-center justify-center">
+                  {photo ? (
+                    <img src={photo} alt="Photo de profil" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-3xl font-bold text-blue-600">{initials}</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-md hover:bg-blue-700 transition-colors text-sm"
+                  title="Changer la photo"
+                >
+                  ✎
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoChange}
+                />
+              </div>
+
+              {/* Name + role */}
+              <div className="flex-1 min-w-0 pt-14">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-xl font-bold text-gray-900 truncate">
+                    {displayName || user.username}
+                  </h1>
+                  {roleInfo && (
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${roleInfo.color}`}>
+                      {roleInfo.label}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-500 truncate">@{user.username}</p>
+              </div>
+            </div>
+
+            {/* Photo actions */}
+            {photo && (
+              <div className="mb-4 flex gap-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  Changer la photo
+                </button>
+                <span className="text-gray-300">·</span>
+                <button
+                  onClick={removePhoto}
+                  className="text-xs text-red-500 hover:text-red-700 font-medium"
+                >
+                  Supprimer
+                </button>
+              </div>
+            )}
+            {!photo && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="mb-4 text-xs text-blue-600 hover:text-blue-800 font-medium"
               >
-                {showDebug ? "Masquer les détails" : "Afficher les détails"}
+                + Ajouter une photo de profil
               </button>
-            </div>
-          </div>
-          
-          <div className="pt-6 flex flex-wrap gap-3">
-            <Link href="/">
-              <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2">
-                ← Retour à l'accueil
-              </button>
-            </Link>
-            <button 
-              onClick={loadProfile}
-              className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-            >
-              Actualiser
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      {showDebug && (
-        <div className="mt-6 border border-gray-200 rounded-lg overflow-hidden">
-          <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-            <h3 className="text-sm font-medium text-gray-900">Détails techniques</h3>
-          </div>
-          <div className="p-4 space-y-3 text-sm bg-white">
-            <div className="grid grid-cols-3 gap-2">
-              <div className="font-medium text-gray-700">Auth Base:</div>
-              <div className="col-span-2 font-mono text-gray-900">{debugInfo.authBase || "Non défini"}</div>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="font-medium text-gray-700">URL de requête:</div>
-              <div className="col-span-2 font-mono text-gray-900 break-all">{debugInfo.requestUrl || "Non générée"}</div>
-            </div>
-            {debugInfo.response && (
-              <div>
-                <div className="font-medium text-gray-700 mb-2">Réponse complète:</div>
-                <pre className="mt-1 p-3 bg-gray-50 border border-gray-200 rounded text-xs overflow-auto max-h-64">
-                  {JSON.stringify(debugInfo.response, null, 2)}
-                </pre>
-              </div>
             )}
           </div>
         </div>
-      )}
+
+        {/* Editable fields */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 divide-y divide-gray-100">
+
+          {/* Display name */}
+          <div className="px-6 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Nom affiché</p>
+                {editingDisplayName ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveDisplayName(); if (e.key === "Escape") setEditingDisplayName(false) }}
+                      className="flex-1 border border-blue-400 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      autoFocus
+                    />
+                    <button onClick={saveDisplayName} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                      Sauv.
+                    </button>
+                    <button onClick={() => setEditingDisplayName(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-base font-medium text-gray-900">{displayName || user.username || "—"}</p>
+                )}
+              </div>
+              {!editingDisplayName && (
+                <button
+                  onClick={() => setEditingDisplayName(true)}
+                  className="shrink-0 text-xs text-blue-600 hover:text-blue-800 font-medium mt-5"
+                >
+                  Modifier
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Bio */}
+          <div className="px-6 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Biographie</p>
+                {editingBio ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={bio}
+                      onChange={(e) => setBio(e.target.value)}
+                      rows={3}
+                      placeholder="Parlez de vous…"
+                      className="w-full border border-blue-400 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={saveBio} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Sauvegarder
+                      </button>
+                      <button onClick={() => setEditingBio(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {bio || <span className="text-gray-400 italic">Aucune biographie</span>}
+                  </p>
+                )}
+              </div>
+              {!editingBio && (
+                <button
+                  onClick={() => setEditingBio(true)}
+                  className="shrink-0 text-xs text-blue-600 hover:text-blue-800 font-medium mt-5"
+                >
+                  Modifier
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Read-only account info */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-900">Informations du compte</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Ces informations sont gérées par le serveur</p>
+          </div>
+          <div className="divide-y divide-gray-100">
+            <div className="px-6 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Nom d'utilisateur</p>
+                <p className="text-sm font-medium text-gray-900">@{user.username}</p>
+              </div>
+              <span className="text-gray-300 text-lg">🔒</span>
+            </div>
+            <div className="px-6 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Adresse e-mail</p>
+                <p className="text-sm font-medium text-gray-900">{user.email || "—"}</p>
+              </div>
+              {user.email && (
+                <span className="text-xs bg-green-50 text-green-600 border border-green-200 px-2 py-0.5 rounded-full font-medium">Vérifié</span>
+              )}
+            </div>
+            <div className="px-6 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Rôle</p>
+                {roleInfo ? (
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${roleInfo.color}`}>
+                    {roleInfo.label}
+                  </span>
+                ) : (
+                  <p className="text-sm font-medium text-gray-900">{user.role || "—"}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3">
+          <Link href="/" className="flex-1">
+            <button className="w-full py-2.5 text-sm text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors font-medium">
+              ← Retour à l'accueil
+            </button>
+          </Link>
+        </div>
+
+      </div>
     </div>
   )
 }
