@@ -1,51 +1,49 @@
-import type { NextAuthOptions } from "next-auth"
+// lib/auth.ts
+// Configuration NextAuth v5 (next-auth@5.x beta).
+// AUTH_SECRET est lu depuis .env.local (requis en v5).
+// L'authentification principale passe par components/auth/auth-provider.tsx
+// (JWT Spring Boot stocké dans localStorage). NextAuth est conservé pour
+// la compatibilité avec SessionProvider et les helpers session SSR.
+
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 
-export const authOptions: NextAuthOptions = {
+const nextAuth = NextAuth({
   providers: [
     Credentials({
       name: "Credentials",
       credentials: {
-        email: { label: "Email", type: "text" },
+        email:    { label: "Email",    type: "text"     },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        // Replace with real verification. Demo user below:
+        // Fallback local uniquement — la vraie auth passe par Spring Boot
         if (credentials?.email) {
           return {
-            id: "1",
-            name: "Arthur Dubois",
-            email: credentials.email,
-            // Add roles so ProtectedRoute can use them
-            roles: ["official"],
-          } as any
+            id:    "1",
+            name:  String(credentials.email),
+            email: String(credentials.email),
+          }
         }
         return null
       },
     }),
   ],
+
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.roles = (user as any).roles ?? []
-      }
+      if (user) token.id = user.id
       return token
     },
     async session({ session, token }) {
-      // Harden session to avoid runtime errors
-      session.user = session.user ?? ({} as any)
-      ;(session.user as any).roles = (token as any).roles ?? []
+      if (session.user) (session.user as any).id = token.id
       return session
     },
   },
-  pages: {
-    signIn: "/login",
-  },
-} as const
 
-// v5 pattern: create handlers and auth helper once and re-export
-export const {
-  handlers: { GET, POST },
-  auth,
-} = NextAuth(authOptions)
+  pages: { signIn: "/login" },
+})
+
+export const { handlers, auth, signIn, signOut } = nextAuth
+// Réexporte GET et POST pour src/app/api/auth/[...nextauth]/route.ts
+export const { GET, POST } = nextAuth.handlers

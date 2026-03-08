@@ -1,17 +1,19 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { 
-  Calendar, 
-  Trophy, 
-  MapPin, 
-  Shield, 
-  Users, 
-  ClipboardCheck, 
-  Heart, 
+import {
+  Calendar,
+  Trophy,
+  MapPin,
+  Shield,
+  Users,
+  ClipboardCheck,
+  Heart,
   Eye,
   Settings,
-  BarChart3
+  BarChart3,
+  Map,
+  Navigation
 } from "lucide-react"
 import { useAuth } from "@/components/auth/auth-provider"
 import Link from "next/link"
@@ -119,6 +121,31 @@ const navigationItems: NavItem[] = [
     href: "/spectator",
     icon: Eye,
     roles: ["spectator"]
+  },
+  // ── Géolocalisation ──────────────────────────────────────────────────────
+  {
+    label: "Fan Zones",
+    href: "/fanzones",
+    icon: Navigation,
+    roles: ["spectator", "athlete", "volunteer", "all"]
+  },
+  {
+    label: "Carte athlètes",
+    href: "/commissaire/athletes/carte",
+    icon: Map,
+    roles: ["commissaire"]
+  },
+  {
+    label: "Gestion Fan Zones",
+    href: "/admin/fanzones",
+    icon: Map,
+    roles: ["admin"]
+  },
+  {
+    label: "Carte athlètes",
+    href: "/admin/athletes/carte",
+    icon: Navigation,
+    roles: ["admin"]
   }
 ]
 
@@ -144,6 +171,12 @@ export function RoleBasedNav() {
           <Link href="/venues">
             <MapPin className="h-4 w-4" />
             <span>Venues</span>
+          </Link>
+        </Button>
+        <Button variant="ghost" size="sm" className="flex items-center space-x-2" asChild>
+          <Link href="/fanzones">
+            <Navigation className="h-4 w-4" />
+            <span>Fan Zones</span>
           </Link>
         </Button>
       </nav>

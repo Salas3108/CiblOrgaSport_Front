@@ -23,6 +23,10 @@ const nextConfig = {
         source: "/api/athletes/:id/equipe",
         destination: "http://localhost:3001/athletes/:id/equipe",
       },
+      {
+        source: "/api/geo/:path*",
+        destination: "http://localhost:8091/api/geo/:path*",
+      },
     ]
   },
 }
