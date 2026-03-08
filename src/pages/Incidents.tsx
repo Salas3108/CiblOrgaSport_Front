@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { listIncidents, createIncident } from '../api/incidentService';
+import { getIncidents as listIncidents, createIncident } from '../api/incidentService';
 
 export default function Incidents() {
   const [incidents, setIncidents] = useState<any[]>([]);

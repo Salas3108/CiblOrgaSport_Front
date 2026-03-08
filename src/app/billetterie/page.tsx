@@ -1,10 +1,10 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { listTickets, createTicket, deleteTicket } from '../../src/api/ticketService';
-import eventsApi from '../../src/api/eventsService';
+import { listTickets, createTicket, deleteTicket } from '../../api/ticketService';
+import eventsApi from '../../api/eventsService';
 import { authRepo } from '../../lib/services/auth-service';
 import QRCode from 'react-qr-code';
-import { useAuth } from '../../components/auth/auth-provider';
+import { useAuth } from '@/components/auth/auth-provider';
 
 interface Ticket {
   id: number;
