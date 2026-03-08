@@ -3,6 +3,19 @@ import type { AxiosResponse } from 'axios';
 
 const base = apiBases.auth;
 
+function getAdminAuthToken() {
+  if (typeof window === 'undefined') return '';
+  return (
+    localStorage.getItem('adminToken') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('accessToken') ||
+    sessionStorage.getItem('adminToken') ||
+    sessionStorage.getItem('token') ||
+    sessionStorage.getItem('accessToken') ||
+    ''
+  );
+}
+
 // Récupérer la liste des athlètes (ADMIN)
 export async function fetchAthletes(validated?: boolean) {
   const token = localStorage.getItem('token');
@@ -56,6 +69,55 @@ export async function adminValidateAthlete(payload: { username: string; validate
   if (!res.ok) {
     // Si le backend renvoie une erreur HTTP, lancer avec le message disponible
     const message = typeof data === 'string' ? data : (data?.message || 'Erreur API');
+    throw new Error(message);
+  }
+
+  return data;
+}
+
+// Créer le profil métier de l'athlète après validation (ADMIN)
+export async function createAthleteProfile(athleteId: number, athleteUsername: string) {
+  const token = getAdminAuthToken();
+  if (!token) {
+    throw new Error("Token admin introuvable");
+  }
+  const requestUrl = `http://localhost:8087/api/athlete/${athleteId}`;
+  const body = { username: athleteUsername };
+  console.log('[createAthleteProfile] Request', {
+    url: requestUrl,
+    method: 'POST',
+    athleteId,
+    body,
+    hasToken: Boolean(token),
+    tokenPreview: `${token.slice(0, 12)}...`
+  });
+  const res = await fetch(requestUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  console.log('[createAthleteProfile] Response', {
+    url: requestUrl,
+    status: res.status,
+    ok: res.ok
+  });
+
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    data = text;
+  }
+
+  // Profil déjà existant: on considère l'opération comme idempotente/success.
+  if (res.status === 409) return data;
+
+  if (!res.ok) {
+    const message = typeof data === 'string' ? data : (data?.message || 'Erreur lors de la création du profil athlète');
     throw new Error(message);
   }
 
