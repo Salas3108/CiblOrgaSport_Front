@@ -2,6 +2,7 @@
 import { Button } from "@/components/ui/button"
 import { Menu, User, Calendar, Trophy, MapPin, LogOut } from "lucide-react"
 import { useAuth } from "@/components/auth/auth-provider"
+import Link from "next/link"
 import { NotificationCenter } from "@/components/notifications/notification-center"
 import { RoleBasedNav } from "@/components/navigation/role-based-nav"
 import {
@@ -20,7 +21,7 @@ export function Header() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
+          <Link href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
             <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
               <Trophy className="h-4 w-4 text-primary-foreground" />
             </div>
@@ -28,7 +29,7 @@ export function Header() {
               <h1 className="text-lg font-bold text-foreground">CiblOrgaSport</h1>
               <p className="text-xs text-muted-foreground">European Swimming Championships 2026</p>
             </div>
-          </div>
+          </Link>
         </div>
 
         <RoleBasedNav />

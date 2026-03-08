@@ -12,6 +12,7 @@ import { SecurityProvider } from "@/components/security/security-provider"
 import { SessionProvider } from "next-auth/react"
 import "./globals.css"
 import ClientProviders from "@/components/providers/client-providers"
+import { Header } from "@/components/header"
 
 export const metadata: Metadata = {
   title: "CiblOrgaSport - European Swimming Championships 2026",
@@ -26,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
+      <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable} flex flex-col min-h-screen`}>
         <SessionProvider>
           <AuthProvider>
             <NotificationProvider>
@@ -35,7 +36,10 @@ export default function RootLayout({
                   <SecurityProvider>
                     <Suspense fallback={null}>
                       <ClientProviders>
-                        {children}
+                        <Header />
+                        <main className="flex-1 flex flex-col">
+                          {children}
+                        </main>
                       </ClientProviders>
                     </Suspense>
                   </SecurityProvider>

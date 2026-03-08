@@ -1,4 +1,3 @@
-import { Header } from "@/components/header"
 import { ProtectedRoute } from "@/components/auth/protected-route"
 import { InteractiveMap } from "@/components/maps/interactive-map"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -35,7 +34,6 @@ export default function VenuesPage() {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-background">
-        <Header />
         <main className="container mx-auto px-4 py-8">
           <div className="space-y-8">
             {/* Page Header */}

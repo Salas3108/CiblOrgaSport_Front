@@ -124,122 +124,128 @@ function CartePage() {
 
   if (loadingAthletes) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-950 text-gray-400">
-        Chargement des athlètes…
+      <div className="flex-1 flex items-center justify-center bg-white text-gray-400">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-500">Chargement des athlètes…</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-gray-950 text-gray-100 overflow-hidden">
-      {/* ── WebSocket status banner ── */}
-      {!isConnected && (
-        <div className="absolute top-0 left-0 right-0 z-50 bg-red-700 text-white text-sm text-center py-2 px-4">
-          ⚠️ WebSocket déconnecté — positions en cache REST uniquement
-          {error && <span className="ml-2 opacity-75">({error})</span>}
-        </div>
-      )}
-
-      {/* ── Map ── */}
-      <main className={`flex-1 relative ${!isConnected ? 'pt-9' : ''}`}>
-        <MapComponent center={PARIS_CENTER} zoom={13} className="h-full">
-          {athleteIds.map((id) => (
-            <AthleteMarker
-              key={id}
-              athleteId={id}
-              name={athleteNames.get(id)}
-              position={positions.get(id) ?? null}
-              lastUpdateMs={lastUpdateMs.get(id) ?? null}
-              onClick={() => setHistoryAthleteId(id)}
-            />
-          ))}
-        </MapComponent>
-      </main>
-
-      {/* ── Side panel ── */}
-      <aside className="w-72 bg-gray-900 border-l border-gray-700 flex flex-col overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-700">
-          <h1 className="text-lg font-bold text-white">Suivi athlètes</h1>
-          <div className="flex items-center justify-between mt-1">
-            <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400 animate-pulse' : 'bg-red-500'}`} />
-              <span className="text-xs text-gray-400">
-                {isConnected ? 'Temps réel (WebSocket)' : 'Cache REST'}
-              </span>
-            </div>
-            <span className="text-xs text-gray-500">{athletes.length} athlètes</span>
+    <div className="flex flex-col flex-1 bg-white overflow-hidden">
+      {/* ── Top bar ── */}
+      <div className="shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4">
+        <div className="flex items-center gap-2.5">
+          <span className="text-xl">📍</span>
+          <div>
+            <h1 className="text-base font-bold text-gray-900 leading-tight">Suivi athlètes</h1>
+            <p className="text-xs text-gray-400">Commissaire — temps réel</p>
           </div>
         </div>
-
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
-          {athletes.length === 0 ? (
-            <p className="text-xs text-gray-600 text-center pt-8">Aucun athlète trouvé</p>
-          ) : (
-            athletes.map(({ id }) => {
-              const offline = isOffline(id);
-              const pos = positions.get(id);
-              const isWsLive = wsPositions.has(id);
-              return (
-                <div
-                  key={id}
-                  className={`rounded-xl p-3 border cursor-pointer transition-all ${
-                    hoveredAthleteId === id
-                      ? 'border-blue-500 bg-blue-900/20'
-                      : 'border-gray-700 hover:border-gray-500'
-                  }`}
-                  onMouseEnter={() => setHoveredAthleteId(id)}
-                  onMouseLeave={() => setHoveredAthleteId(null)}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${offline ? 'bg-red-500' : 'bg-green-400 animate-pulse'}`} />
-                    <span className="font-semibold text-sm text-white truncate">
-                      {athleteNames.get(id) ?? `Athlète #${id}`}
-                    </span>
-                    {offline ? (
-                      <span className="ml-auto text-xs text-red-400 font-medium shrink-0">Hors ligne</span>
-                    ) : isWsLive ? (
-                      <span className="ml-auto text-xs text-green-400 shrink-0">Live</span>
-                    ) : (
-                      <span className="ml-auto text-xs text-yellow-500 shrink-0">Cache</span>
-                    )}
-                  </div>
-                  {pos ? (
-                    <p className="text-xs font-mono text-gray-400 ml-5">
-                      {pos.latitude.toFixed(5)}, {pos.longitude.toFixed(5)}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-gray-600 ml-5">Aucune position</p>
-                  )}
-                  <button
-                    onClick={() => setHistoryAthleteId(id)}
-                    className="mt-2 ml-5 text-xs text-blue-400 hover:text-blue-300 underline transition-colors"
-                  >
-                    Voir historique →
-                  </button>
-                </div>
-              );
-            })
+        <div className="flex items-center gap-2 ml-4">
+          <span className="flex items-center gap-1.5 bg-gray-100 rounded-full px-3 py-1 text-xs text-gray-600">
+            {athletes.length} athlètes
+          </span>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-400'}`} />
+          <span className="text-xs text-gray-500">
+            {isConnected ? 'WebSocket actif' : 'Cache REST'}
+          </span>
+          {!isConnected && error && (
+            <span className="text-xs text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded">{error}</span>
           )}
         </div>
+      </div>
 
-        {/* Legend */}
-        <div className="px-5 py-4 border-t border-gray-700 space-y-1.5 text-xs text-gray-500">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-green-400 shrink-0" />
-            Actif — position &lt; 30 s
+      {/* ── Content ── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Map */}
+        <main className="flex-1 relative p-3">
+          <div className="w-full h-full rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+            <MapComponent center={PARIS_CENTER} zoom={13} className="h-full">
+              {athleteIds.map((id) => (
+                <AthleteMarker
+                  key={id}
+                  athleteId={id}
+                  name={athleteNames.get(id)}
+                  position={positions.get(id) ?? null}
+                  lastUpdateMs={lastUpdateMs.get(id) ?? null}
+                  onClick={() => setHistoryAthleteId(id)}
+                />
+              ))}
+            </MapComponent>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-red-500 shrink-0" />
-            Hors ligne — &gt; 30 s
+        </main>
+
+        {/* Side panel */}
+        <aside className="w-72 shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <p className="text-xs text-gray-500">Cliquez sur un athlète pour voir l'historique</p>
           </div>
-          <div className="flex items-center gap-2 mt-1 pt-1 border-t border-gray-800">
-            <span className="text-green-400">Live</span> = WebSocket actif
+          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+            {athletes.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center pt-8">Aucun athlète trouvé</p>
+            ) : (
+              athletes.map(({ id }) => {
+                const offline = isOffline(id);
+                const pos = positions.get(id);
+                const isWsLive = wsPositions.has(id);
+                const name = athleteNames.get(id) ?? `Athlète #${id}`;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setHistoryAthleteId(id)}
+                    onMouseEnter={() => setHoveredAthleteId(id)}
+                    onMouseLeave={() => setHoveredAthleteId(null)}
+                    className={`w-full text-left rounded-xl p-2.5 border transition-all ${
+                      hoveredAthleteId === id
+                        ? 'border-blue-300 bg-blue-50'
+                        : 'border-gray-100 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-bold ${
+                        offline ? 'bg-gray-100 text-gray-400' : 'bg-blue-100 text-blue-600'
+                      }`}>
+                        {name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${offline ? 'bg-red-400' : 'bg-green-500 animate-pulse'}`} />
+                          <span className="text-sm font-medium text-gray-800 truncate">{name}</span>
+                        </div>
+                        {pos ? (
+                          <p className="text-xs font-mono text-gray-400 ml-3 truncate">
+                            {pos.latitude.toFixed(4)}, {pos.longitude.toFixed(4)}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-gray-300 ml-3">Pas de position</p>
+                        )}
+                      </div>
+                      <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded font-medium ${
+                        offline ? 'text-red-500 bg-red-50' :
+                        isWsLive ? 'text-green-600 bg-green-50' :
+                        'text-yellow-600 bg-yellow-50'
+                      }`}>
+                        {offline ? 'Off' : isWsLive ? 'Live' : 'Cache'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-yellow-500">Cache</span> = dernière position REST
+          <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500" /> Actif</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400" /> Hors ligne</span>
+            <span className="text-green-600 font-medium">Live</span>
+            <span className="text-yellow-600 font-medium">Cache</span>
           </div>
-        </div>
-      </aside>
+        </aside>
+      </div>
 
       {historyAthleteId !== null && (
         <PositionHistoryPanel
@@ -253,13 +259,11 @@ function CartePage() {
 
 export default function CartePageWrapper() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-screen items-center justify-center bg-gray-950 text-gray-400">
-          Chargement…
-        </div>
-      }
-    >
+    <Suspense fallback={
+      <div className="flex-1 flex items-center justify-center bg-white text-gray-400">
+        Chargement…
+      </div>
+    }>
       <CartePage />
     </Suspense>
   );

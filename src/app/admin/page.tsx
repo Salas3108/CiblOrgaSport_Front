@@ -1,5 +1,4 @@
 'use client';
-import { Header } from "@/components/header"
 import UserValidation from "@/src/components/admin/UserValidation"
 import EventManagement from "@/src/components/admin/EventManagement"
 import LieuManagement from "@/src/components/admin/LieuManagement"
@@ -13,7 +12,6 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-8">
           {/* Admin Header */}
