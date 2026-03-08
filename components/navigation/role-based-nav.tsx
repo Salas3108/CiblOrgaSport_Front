@@ -140,6 +140,12 @@ const navigationItems: NavItem[] = [
     href: "/admin/fanzones",
     icon: Map,
     roles: ["admin"]
+  },
+  {
+    label: "Carte athlètes",
+    href: "/admin/athletes/carte",
+    icon: Navigation,
+    roles: ["admin"]
   }
 ]
 
