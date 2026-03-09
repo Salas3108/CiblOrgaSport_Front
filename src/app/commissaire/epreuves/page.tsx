@@ -25,11 +25,15 @@ interface Epreuve {
   id: number
   nom: string
   description?: string | null
+  // Données du backend
+  dateHeure?: string
+  dureeMinutes?: number
+  lieuId?: number
+  // Données calculées pour compatibilité
   date?: string | null
   heureDebut?: string | null
   heureFin?: string | null
   lieu?: { id?: number; nom?: string | null } | null
-  lieuId?: number | null
   lieu_id?: number | null
   idLieu?: number | null
   lieuNom?: string | null
@@ -37,7 +41,54 @@ interface Epreuve {
   lieuName?: string | null
 }
 
+// Fonction pour normaliser une épreuve du backend
+const normalizeEpreuve = (epreuve: any): Epreuve => {
+  const extractDate = (dateHeure?: string): string | null => {
+    if (!dateHeure) return null
+    try {
+      return dateHeure.split('T')[0]
+    } catch {
+      return null
+    }
+  }
+
+  const extractHeureDebut = (dateHeure?: string): string | null => {
+    if (!dateHeure) return null
+    try {
+      const timePart = dateHeure.split('T')[1]
+      return timePart ? timePart.substring(0, 5) : null
+    } catch {
+      return null
+    }
+  }
+
+  const calculateHeureFin = (dateHeure?: string, dureeMinutes?: number): string | null => {
+    if (!dateHeure || !dureeMinutes) return null
+    try {
+      const dt = new Date(dateHeure)
+      dt.setMinutes(dt.getMinutes() + dureeMinutes)
+      return dt.toTimeString().substring(0, 5)
+    } catch {
+      return null
+    }
+  }
+
+  return {
+    ...epreuve,
+    date: epreuve.date || extractDate(epreuve.dateHeure),
+    heureDebut: epreuve.heureDebut || extractHeureDebut(epreuve.dateHeure),
+    heureFin: epreuve.heureFin || calculateHeureFin(epreuve.dateHeure, epreuve.dureeMinutes),
+    lieu: epreuve.lieu || (epreuve.lieuId ? { id: epreuve.lieuId, nom: null } : null)
+  }
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
+
+// Vérifier la configuration au chargement
+if (typeof window !== "undefined" && !process.env.NEXT_PUBLIC_API_BASE_URL) {
+  console.warn("⚠️ NEXT_PUBLIC_API_BASE_URL n'est pas défini. Utilisation du fallback:", API_BASE_URL)
+  console.warn("💡 Redémarrez le serveur Next.js si vous venez de créer le fichier .env.local")
+}
 
 const getAuthHeaders = () => {
   if (typeof window === "undefined") return { "Content-Type": "application/json" }
@@ -81,7 +132,11 @@ export default function CommissaireEpreuvesPage() {
         : Array.isArray(data?.epreuves)
           ? data.epreuves
           : []
-      setEpreuves(epreuvesData)
+      
+      // Normaliser les épreuves pour avoir date, heureDebut, heureFin
+      const normalizedEpreuves = epreuvesData.map(normalizeEpreuve)
+      console.log("✅ Épreuves normalisées:", normalizedEpreuves)
+      setEpreuves(normalizedEpreuves)
     } catch (error) {
       toast.error("Erreur de chargement des epreuves")
       console.error(error)
@@ -110,12 +165,27 @@ export default function CommissaireEpreuvesPage() {
   const fetchAthletes = async () => {
     try {
       setLoadingAthletes(true)
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes`, {
+      const url = `${API_BASE_URL}/api/commissaire/athletes`
+      console.log("📡 Chargement des athlètes depuis:", url)
+      
+      const response = await fetch(url, {
         headers: getAuthHeaders()
       })
-      if (!response.ok) throw new Error("Erreur lors du chargement des athletes")
+      
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "")
+        console.error(`❌ Erreur HTTP ${response.status}:`, errorText)
+        
+        if (response.status === 401) {
+          toast.error("Non authentifié. Veuillez vous reconnecter.")
+          throw new Error("Non authentifié")
+        }
+        throw new Error(`Erreur ${response.status}: ${errorText.substring(0, 100)}`)
+      }
 
       const data = await response.json()
+      console.log("✅ Athlètes chargés:", data.length || 0, "athlètes")
+      
       const athletesData: Athlete[] = Array.isArray(data)
         ? data
         : Array.isArray(data?.athletes)
@@ -125,8 +195,15 @@ export default function CommissaireEpreuvesPage() {
       const enriched = await enrichAthletesWithUsername(athletesData)
       setAthletes(enriched)
     } catch (error) {
-      toast.error("Erreur de chargement des athletes")
-      console.error(error)
+      const errorMessage = error instanceof Error ? error.message : "Erreur inconnue"
+      
+      if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
+        toast.error("Impossible d'atteindre le serveur. Vérifiez que le backend est démarré sur le port 8080")
+        console.error("❌ Erreur réseau. Backend accessible sur http://localhost:8080 ?")
+      } else {
+        toast.error(`Erreur de chargement des athlètes: ${errorMessage}`)
+      }
+      console.error("❌ Erreur complète:", error)
     } finally {
       setLoadingAthletes(false)
     }

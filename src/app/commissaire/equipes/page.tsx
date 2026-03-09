@@ -33,6 +33,12 @@ interface Athlete {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
 
+// Vérifier la configuration au chargement
+if (typeof window !== "undefined" && !process.env.NEXT_PUBLIC_API_BASE_URL) {
+  console.warn("⚠️ NEXT_PUBLIC_API_BASE_URL n'est pas défini. Utilisation du fallback:", API_BASE_URL)
+  console.warn("💡 Redémarrez le serveur Next.js si vous venez de créer le fichier .env.local")
+}
+
 const getAuthHeaders = () => {
   if (typeof window === "undefined") return { "Content-Type": "application/json" }
   const token = localStorage.getItem("token") || localStorage.getItem("accessToken")
@@ -70,10 +76,23 @@ export default function CommissaireEquipesPage() {
   const fetchEquipes = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/equipes`, {
+      const url = `${API_BASE_URL}/api/commissaire/equipes`
+      console.log("📡 Chargement des équipes depuis:", url)
+      
+      const response = await fetch(url, {
         headers: getAuthHeaders()
       })
-      if (!response.ok) throw new Error("Erreur lors du chargement des equipes")
+      
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "")
+        console.error(`❌ Erreur HTTP ${response.status}:`, errorText)
+        
+        if (response.status === 401) {
+          toast.error("Non authentifié. Veuillez vous reconnecter.")
+          throw new Error("Non authentifié")
+        }
+        throw new Error(`Erreur ${response.status}: ${errorText.substring(0, 100)}`)
+      }
 
       const data = await response.json()
       
@@ -87,9 +106,17 @@ export default function CommissaireEquipesPage() {
           : []
 
       setEquipes(equipesData)
+      console.log("✅ Équipes chargées:", equipesData.length, "équipes")
     } catch (error) {
-      toast.error("Erreur de chargement des equipes")
-      console.error(error)
+      const errorMessage = error instanceof Error ? error.message : "Erreur inconnue"
+      
+      if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
+        toast.error("Impossible d'atteindre le serveur. Vérifiez que le backend est démarré sur le port 8080")
+        console.error("❌ Erreur réseau. Backend accessible sur http://localhost:8080 ?")
+      } else {
+        toast.error(`Erreur de chargement des équipes: ${errorMessage}`)
+      }
+      console.error("❌ Erreur complète:", error)
     } finally {
       setLoading(false)
     }
