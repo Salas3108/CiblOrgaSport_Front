@@ -69,21 +69,21 @@ export default function PositionHistoryPanel({
   }, [athleteId]);
 
   return (
-    /* Overlay */
-    <div className="fixed inset-0 z-50 flex justify-end">
+    /* Overlay — z-2000 pour passer au-dessus de Leaflet (z ~1000) */
+    <div className="fixed inset-0 z-2000 flex justify-end">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       {/* Panneau */}
-      <aside className="relative z-10 w-full max-w-md bg-gray-900 text-gray-100 flex flex-col h-full shadow-2xl">
+      <aside className="relative z-10 w-full max-w-md bg-white text-gray-900 flex flex-col h-full shadow-2xl border-l border-gray-200">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <div>
-            <h2 className="text-lg font-bold">Historique</h2>
-            <p className="text-sm text-gray-400">Athlète #{athleteId}</p>
+            <h2 className="text-lg font-bold text-gray-900">Historique</h2>
+            <p className="text-sm text-gray-500">Athlète #{athleteId}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white text-2xl leading-none transition-colors"
+            className="text-gray-400 hover:text-gray-700 text-2xl leading-none transition-colors"
             aria-label="Fermer le panneau"
           >
             ×
@@ -91,24 +91,24 @@ export default function PositionHistoryPanel({
         </div>
 
         {/* Filtres dates */}
-        <div className="px-5 py-3 border-b border-gray-700 space-y-2">
+        <div className="px-5 py-3 border-b border-gray-100 space-y-2 bg-gray-50">
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Début</label>
+              <label className="block text-xs text-gray-500 mb-1">Début</label>
               <input
                 type="datetime-local"
                 value={dateDebut}
                 onChange={(e) => setDateDebut(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full bg-white border border-gray-300 rounded px-2 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Fin</label>
+              <label className="block text-xs text-gray-500 mb-1">Fin</label>
               <input
                 type="datetime-local"
                 value={dateFin}
                 onChange={(e) => setDateFin(e.target.value)}
-                className="w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-xs text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full bg-white border border-gray-300 rounded px-2 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
           </div>
@@ -129,29 +129,29 @@ export default function PositionHistoryPanel({
           )}
 
           {error && (
-            <p className="text-red-400 text-sm text-center py-4">{error}</p>
+            <p className="text-red-500 text-sm text-center py-4">{error}</p>
           )}
 
           {!isLoading && !error && history.length === 0 && (
-            <p className="text-gray-500 text-sm text-center py-8">
+            <p className="text-gray-400 text-sm text-center py-8">
               Aucune position enregistrée sur cette période.
             </p>
           )}
 
           {!isLoading && !error && history.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs text-gray-500 mb-3">
+              <p className="text-xs text-gray-400 mb-3">
                 {history.length} position{history.length > 1 ? 's' : ''}
               </p>
               {history.map((pos) => (
                 <div
                   key={pos.id}
-                  className="bg-gray-800 rounded-lg p-3 border border-gray-700 text-sm"
+                  className="bg-gray-50 rounded-lg p-3 border border-gray-200 text-sm"
                 >
-                  <p className="text-gray-300 text-xs mb-1">
+                  <p className="text-gray-500 text-xs mb-1">
                     🕐 {formatTimestamp(pos.timestamp)}
                   </p>
-                  <p className="font-mono text-green-400 text-xs">
+                  <p className="font-mono text-blue-600 text-xs">
                     {pos.latitude.toFixed(6)}, {pos.longitude.toFixed(6)}
                   </p>
                 </div>
