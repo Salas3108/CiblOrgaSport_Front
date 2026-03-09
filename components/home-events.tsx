@@ -161,7 +161,9 @@ export default function HomeEvents() {
         console.log(`${userName} n'a pas d'abonnements`)
       }
     } catch (error) {
-      console.error('Erreur:', error)
+      // Ignorer silencieusement si le service d'abonnements n'est pas disponible
+      console.warn('⚠️ Service d\'abonnements non disponible (port 8085):', error)
+      setAbonnements(new Set())
     }
   }
 
