@@ -2,13 +2,14 @@
 import UserValidation from "@/src/components/admin/UserValidation"
 import EventManagement from "@/src/components/admin/EventManagement"
 import LieuManagement from "@/src/components/admin/LieuManagement"
-import ListeAthletes from "@/src/components/admin/ListeAthletes"
+import CompetitionManagement from "@/src/components/admin/CompetitionManagement"
+import EpreuveManagement from "@/src/components/admin/EpreuveManagement"
 import VolunteerProgramImport from "@/src/components/admin/VolunteerProgramImport"
 import { Users } from "lucide-react"
 import { useState } from "react"
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'lieux' | 'volunteers'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'events' | 'lieux' | 'competitions' | 'epreuves' | 'volunteers'>('users');
 
   return (
     <div className="min-h-screen bg-background">
@@ -54,6 +55,26 @@ export default function AdminPage() {
                 Gestion des Lieux
               </button>
               <button
+                onClick={() => setActiveTab('competitions')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'competitions'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Compétitions
+              </button>
+              <button
+                onClick={() => setActiveTab('epreuves')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'epreuves'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Épreuves
+              </button>
+              <button
                 onClick={() => setActiveTab('volunteers')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
                   activeTab === 'volunteers'
@@ -76,6 +97,8 @@ export default function AdminPage() {
             )}
             {activeTab === 'events' && <EventManagement />}
             {activeTab === 'lieux' && <LieuManagement />}
+            {activeTab === 'competitions' && <CompetitionManagement />}
+            {activeTab === 'epreuves' && <EpreuveManagement />}
             {activeTab === 'volunteers' && <VolunteerProgramImport />}
           </div>
         </div>

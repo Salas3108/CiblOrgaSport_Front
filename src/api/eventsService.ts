@@ -138,6 +138,40 @@ export async function deleteLieu(id: number) {
   });
 }
 
+// ========== EPREUVE PARTICIPANTS ==========
+export async function getEpreuveAthletes(epreuveId: number) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/athletes`);
+}
+
+export async function getEpreuveEquipes(epreuveId: number) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/equipes`);
+}
+
+export async function addAthleteToEpreuve(epreuveId: number, athleteId: number) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/athletes`, {
+    method: 'POST',
+    body: JSON.stringify({ athleteId })
+  });
+}
+
+export async function addAthletesBulkToEpreuve(epreuveId: number, athleteIds: number[]) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/athletes/bulk`, {
+    method: 'POST',
+    body: JSON.stringify({ athleteIds })
+  });
+}
+
+export async function addEquipesToEpreuve(epreuveId: number, equipeIds: number[]) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/equipes`, {
+    method: 'POST',
+    body: JSON.stringify({ equipeIds })
+  });
+}
+
+export async function getEpreuvesByAthlete(athleteId: number) {
+  return fetchAPI(`${GATEWAY}/epreuves/athletes/${athleteId}`);
+}
+
 // ========== ADMIN ROUTES ==========
 export async function adminGetEvents() {
   return fetchAPI(`${GATEWAY}/admin/events`);
@@ -170,8 +204,8 @@ export async function adminAddEpreuveToCompetition(competitionId: number, epreuv
   });
 }
 
-export default { 
-  getEvents, 
+export default {
+  getEvents,
   getEventById,
   createEvent,
   updateEvent,
@@ -191,6 +225,12 @@ export default {
   createLieu,
   updateLieu,
   deleteLieu,
+  getEpreuveAthletes,
+  getEpreuveEquipes,
+  addAthleteToEpreuve,
+  addAthletesBulkToEpreuve,
+  addEquipesToEpreuve,
+  getEpreuvesByAthlete,
   adminGetEvents,
   adminCreateEvent,
   adminDeleteEvent,
