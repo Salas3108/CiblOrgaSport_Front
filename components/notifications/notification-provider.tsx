@@ -2,7 +2,18 @@
 
 import type React from "react"
 
-import { createContext, useContext, useEffect, useState } from "react"
+import { Client, type StompSubscription } from "@stomp/stompjs"
+import SockJS from "sockjs-client"
+import { createContext, useContext, useEffect, useRef, useState } from "react"
+import { useAuth } from "@/components/auth/auth-provider"
+import { getTokenFromStorage, getUserId } from "@/lib/jwt"
+import {
+  type BackendNotificationDTO,
+  deleteNotificationById,
+  getSpectatorNotifications,
+  markAllSpectatorNotificationsAsRead,
+  markNotificationAsRead,
+} from "@/src/api/notificationsService"
 
 export interface Notification {
   id: string
@@ -14,6 +25,10 @@ export interface Notification {
   priority: "low" | "medium" | "high" | "urgent"
   category?: string
   actionUrl?: string
+  backendType?: string
+  idEvent?: number | null
+  idSpectateur?: number | null
+  sourceEventId?: string | null
 }
 
 interface NotificationContextType {
@@ -49,10 +64,175 @@ const defaultPreferences: NotificationPreferences = {
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined)
+const NOTIFICATIONS_WS_URL = process.env.NEXT_PUBLIC_NOTIFICATIONS_WS_URL || "http://localhost:8089/ws"
+const MAX_NOTIFICATIONS = 200
+
+const notificationTypeToPreferenceKey: Record<Notification["type"], keyof NotificationPreferences> = {
+  result: "results",
+  security: "security",
+  event: "events",
+  system: "system",
+  personal: "personal",
+}
+
+const typeTitleMap: Record<Notification["type"], string> = {
+  result: "Result update",
+  security: "Security alert",
+  event: "Event update",
+  system: "System message",
+  personal: "Notification",
+}
+
+const typePriorityMap: Record<Notification["type"], Notification["priority"]> = {
+  result: "medium",
+  security: "high",
+  event: "medium",
+  system: "low",
+  personal: "medium",
+}
+
+function toNotificationType(rawType: string): Notification["type"] {
+  const normalized = rawType.toUpperCase()
+
+  if (normalized.includes("INCIDENT") || normalized.includes("SECUR") || normalized.includes("ALERT")) {
+    return "security"
+  }
+
+  if (normalized.includes("RESULT") || normalized.includes("CLASSEMENT") || normalized.includes("MEDAILLE")) {
+    return "result"
+  }
+
+  if (normalized.includes("EVENT") || normalized.includes("EPREUVE") || normalized.includes("COMPET")) {
+    return "event"
+  }
+
+  if (normalized.includes("SYSTEM") || normalized.includes("MAINTENANCE")) {
+    return "system"
+  }
+
+  return "personal"
+}
+
+function toNotificationPriority(rawType: string, content: string): Notification["priority"] {
+  const normalized = `${rawType} ${content}`.toUpperCase()
+
+  if (
+    normalized.includes("CRITIQUE") ||
+    normalized.includes("CRITICAL") ||
+    normalized.includes("URGENT") ||
+    normalized.includes("EMERGENCY")
+  ) {
+    return "urgent"
+  }
+
+  if (
+    normalized.includes("HIGH") ||
+    normalized.includes("SEVERE") ||
+    normalized.includes("ALERT") ||
+    normalized.includes("INCIDENT")
+  ) {
+    return "high"
+  }
+
+  if (normalized.includes("LOW")) {
+    return "low"
+  }
+
+  return "medium"
+}
+
+function resolveSpectatorId(): number | null {
+  const fromToken = getUserId()
+  if (typeof fromToken === "number" && Number.isFinite(fromToken)) {
+    return fromToken
+  }
+
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  const rawUser = localStorage.getItem("user")
+  if (!rawUser) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(rawUser)
+    const candidate = parsed?.id ?? parsed?.idSpectateur ?? parsed?.spectatorId ?? parsed?.userId
+    const asNumber = Number(candidate)
+    return Number.isFinite(asNumber) ? asNumber : null
+  } catch {
+    return null
+  }
+}
+
+function mapBackendNotification(dto: BackendNotificationDTO): Notification {
+  const type = toNotificationType(dto.type)
+  const timestamp = new Date(dto.dateEnvoi)
+
+  return {
+    id: `server-${dto.id}`,
+    type,
+    title: typeTitleMap[type],
+    message: dto.contenu,
+    timestamp: Number.isNaN(timestamp.getTime()) ? new Date() : timestamp,
+    read: dto.lu,
+    priority: toNotificationPriority(dto.type, dto.contenu) || typePriorityMap[type],
+    backendType: dto.type,
+    idEvent: dto.idEvent,
+    idSpectateur: dto.idSpectateur,
+    sourceEventId: dto.sourceEventId,
+  }
+}
+
+function extractServerId(id: string): number | null {
+  const match = id.match(/^server-(\d+)$/)
+  if (!match) {
+    return null
+  }
+
+  const parsed = Number(match[1])
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function sortNotifications(items: Notification[]): Notification[] {
+  return [...items].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, MAX_NOTIFICATIONS)
+}
+
+function upsertNotification(items: Notification[], next: Notification): Notification[] {
+  const index = items.findIndex((current) => current.id === next.id)
+
+  if (index === -1) {
+    return sortNotifications([next, ...items])
+  }
+
+  const updated = [...items]
+  updated[index] = next
+  return sortNotifications(updated)
+}
+
+function notifyClient(title: string, body: string, preferences: NotificationPreferences) {
+  if (preferences.desktop && "Notification" in window && window.Notification.permission === "granted") {
+    new window.Notification(title, {
+      body,
+      icon: "/favicon.ico",
+    })
+  }
+
+  if (preferences.sound) {
+    console.log("[notifications] sound placeholder")
+  }
+}
+
+function isNotificationTypeEnabled(type: Notification["type"], preferences: NotificationPreferences): boolean {
+  return preferences[notificationTypeToPreferenceKey[type]]
+}
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuth()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [preferences, setPreferences] = useState<NotificationPreferences>(defaultPreferences)
+  const preferencesRef = useRef(preferences)
 
   // Load preferences from localStorage on mount
   useEffect(() => {
@@ -66,93 +246,149 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, [])
 
-  // Simulate real-time notifications
   useEffect(() => {
-    const interval = setInterval(() => {
-      // Simulate random notifications based on user role
-      const user = JSON.parse(localStorage.getItem("user") || "{}")
-      if (!user.authenticated) return
+    preferencesRef.current = preferences
+  }, [preferences])
 
-      const sampleNotifications = [
-        {
-          type: "result" as const,
-          title: "New Result",
-          message: "Men's 200m Freestyle Final completed - Léon Marchand wins gold!",
-          priority: "high" as const,
-          category: "Swimming",
-        },
-        {
-          type: "security" as const,
-          title: "Security Update",
-          message: "All venues operating normally. No incidents reported.",
-          priority: "medium" as const,
-        },
-        {
-          type: "event" as const,
-          title: "Event Update",
-          message: "Women's 100m Butterfly Semi-Final delayed by 15 minutes",
-          priority: "medium" as const,
-        },
-        {
-          type: "personal" as const,
-          title: "Schedule Reminder",
-          message: "Your next event starts in 30 minutes",
-          priority: "high" as const,
-        },
-      ]
+  // Load backend notifications and subscribe to real-time updates
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setNotifications([])
+      return
+    }
 
-      // Random chance to send a notification
-      if (Math.random() < 0.3) {
-        const randomNotification = sampleNotifications[Math.floor(Math.random() * sampleNotifications.length)]
-        addNotification(randomNotification)
+    const spectatorId = resolveSpectatorId()
+    if (!spectatorId) {
+      setNotifications([])
+      return
+    }
+
+    let cancelled = false
+    let subscription: StompSubscription | null = null
+
+    const loadHistory = async () => {
+      try {
+        const history = await getSpectatorNotifications(spectatorId)
+        if (cancelled) return
+        setNotifications(sortNotifications(history.map(mapBackendNotification)))
+      } catch (error) {
+        console.error("Failed to load notifications:", error)
+        if (!cancelled) {
+          setNotifications([])
+        }
       }
-    }, 15000) // Every 15 seconds
+    }
 
-    return () => clearInterval(interval)
-  }, [])
+    loadHistory()
+
+    const token = getTokenFromStorage()
+    const client = new Client({
+      webSocketFactory: () => new SockJS(NOTIFICATIONS_WS_URL) as WebSocket,
+      connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
+      reconnectDelay: 5000,
+      onConnect: () => {
+        subscription = client.subscribe(`/topic/notifications/${spectatorId}`, (message) => {
+          try {
+            const dto = JSON.parse(message.body) as BackendNotificationDTO
+            const mapped = mapBackendNotification(dto)
+
+            if (!isNotificationTypeEnabled(mapped.type, preferencesRef.current)) {
+              return
+            }
+
+            setNotifications((prev) => upsertNotification(prev, mapped))
+            notifyClient(mapped.title, mapped.message, preferencesRef.current)
+          } catch (error) {
+            console.error("Failed to parse notification message:", error)
+          }
+        })
+      },
+      onStompError: (frame) => {
+        console.error("Notifications STOMP error:", frame.headers["message"] || frame.body)
+      },
+      onWebSocketError: (event) => {
+        console.error("Notifications WebSocket error:", event)
+      },
+    })
+
+    client.activate()
+
+    return () => {
+      cancelled = true
+      if (subscription) {
+        subscription.unsubscribe()
+      }
+      client.deactivate()
+    }
+  }, [isAuthenticated, user?.email, user?.role])
 
   const addNotification = (notification: Omit<Notification, "id" | "timestamp" | "read">) => {
-    // Check if this type of notification is enabled
-    if (!preferences[notification.type]) return
+    if (!isNotificationTypeEnabled(notification.type, preferences)) {
+      return
+    }
 
     const newNotification: Notification = {
       ...notification,
-      id: Date.now().toString(),
+      id: `local-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
       timestamp: new Date(),
       read: false,
     }
 
-    setNotifications((prev) => [newNotification, ...prev].slice(0, 50)) // Keep only last 50
-
-    // Show desktop notification if enabled
-    if (preferences.desktop && "Notification" in window && Notification.permission === "granted") {
-      new Notification(notification.title, {
-        body: notification.message,
-        icon: "/favicon.ico",
-      })
-    }
-
-    // Play sound if enabled
-    if (preferences.sound) {
-      // In a real app, you'd play an actual sound file
-      console.log("[v0] Notification sound would play here")
-    }
+    setNotifications((prev) => sortNotifications([newNotification, ...prev]))
+    notifyClient(notification.title, notification.message, preferences)
   }
 
   const markAsRead = (id: string) => {
     setNotifications((prev) => prev.map((notif) => (notif.id === id ? { ...notif, read: true } : notif)))
+
+    const serverId = extractServerId(id)
+    if (!serverId) {
+      return
+    }
+
+    markNotificationAsRead(serverId).catch((error) => {
+      console.error("Failed to mark notification as read:", error)
+    })
   }
 
   const markAllAsRead = () => {
     setNotifications((prev) => prev.map((notif) => ({ ...notif, read: true })))
+
+    const spectatorId = resolveSpectatorId()
+    if (!spectatorId) {
+      return
+    }
+
+    markAllSpectatorNotificationsAsRead(spectatorId).catch((error) => {
+      console.error("Failed to mark all notifications as read:", error)
+    })
   }
 
   const removeNotification = (id: string) => {
     setNotifications((prev) => prev.filter((notif) => notif.id !== id))
+
+    const serverId = extractServerId(id)
+    if (!serverId) {
+      return
+    }
+
+    deleteNotificationById(serverId).catch((error) => {
+      console.error("Failed to delete notification:", error)
+    })
   }
 
   const clearAll = () => {
+    const serverIds = notifications
+      .map((notification) => extractServerId(notification.id))
+      .filter((id): id is number => id !== null)
+
     setNotifications([])
+
+    serverIds.forEach((id) => {
+      deleteNotificationById(id).catch((error) => {
+        console.error("Failed to delete notification:", error)
+      })
+    })
   }
 
   const updatePreferences = (newPreferences: Partial<NotificationPreferences>) => {
@@ -161,8 +397,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     localStorage.setItem("notification-preferences", JSON.stringify(updated))
 
     // Request desktop notification permission if enabled
-    if (updated.desktop && "Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission()
+    if (updated.desktop && "Notification" in window && window.Notification.permission === "default") {
+      window.Notification.requestPermission()
     }
   }
 
