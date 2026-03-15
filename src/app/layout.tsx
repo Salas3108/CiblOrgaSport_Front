@@ -4,14 +4,13 @@ import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
+import { SessionProvider } from "next-auth/react"
+import "./globals.css"
 import { AuthProvider } from "@/components/auth/auth-provider"
 import { NotificationProvider } from "@/components/notifications/notification-provider"
 import { GeolocationProvider } from "@/components/maps/geolocation-provider"
 import { ResultsProvider } from "@/components/results/results-provider"
 import { SecurityProvider } from "@/components/security/security-provider"
-import { SessionProvider } from "next-auth/react"
-import "./globals.css"
-import ClientProviders from "@/components/providers/client-providers"
 
 export const metadata: Metadata = {
   title: "CiblOrgaSport - European Swimming Championships 2026",
@@ -33,11 +32,7 @@ export default function RootLayout({
               <GeolocationProvider>
                 <ResultsProvider>
                   <SecurityProvider>
-                    <Suspense fallback={null}>
-                      <ClientProviders>
-                        {children}
-                      </ClientProviders>
-                    </Suspense>
+                    <Suspense fallback={null}>{children}</Suspense>
                   </SecurityProvider>
                 </ResultsProvider>
               </GeolocationProvider>

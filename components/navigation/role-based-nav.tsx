@@ -61,6 +61,12 @@ const navigationItems: NavItem[] = [
     roles: ["admin"]
   },
   {
+    label: "Gestion événements",
+    href: "/admin/events",
+    icon: Calendar,
+    roles: ["admin", "commissaire"]
+  },
+  {
     label: "Athletes",
     href: "/athlete",
     icon: Users,
@@ -100,6 +106,12 @@ const navigationItems: NavItem[] = [
     label: "Assignation épreuves",
     href: "/commissaire/epreuves",
     icon: Trophy,
+    roles: ["commissaire"]
+  },
+  {
+    label: "Saisie des résultats",
+    href: "/commissaire/resultats",
+    icon: BarChart3,
     roles: ["commissaire"]
   },
   {

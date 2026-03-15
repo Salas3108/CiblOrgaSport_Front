@@ -109,7 +109,7 @@ export default function OfficialPage() {
   const fetchAthletes = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes`, {
+      const response = await fetch(`${API_BASE_URL}/commissaire/athletes`, {
         headers: getAuthHeaders()
       })
       if (!response.ok) throw new Error("Erreur lors du chargement des athlètes")
@@ -165,30 +165,26 @@ export default function OfficialPage() {
   // Valider un athlète
   const handleValidateAthlete = async (athleteId: number, valide: boolean, reason?: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/validation`, {
+      const response = await fetch(`${API_BASE_URL}/commissaire/athletes/${athleteId}/validation`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          id: athleteId,
           valide,
-          motif: reason
+          message: valide ? 'Dossier validé' : reason,
+          motifRefus: valide ? null : (reason ?? null)
         })
       })
-      
-      if (!response.ok) throw new Error("Erreur lors de la validation")
-      
-      const data = await response.json()
-      if (data.success) {
-        toast.success(valide ? "Athlète validé avec succès" : "Athlète refusé avec succès")
-        setValidationDialogOpen(false)
-        setRefusalReason("")
-        fetchAthletes() // Rafraîchir la liste
-        
-        // Réinitialiser l'athlète sélectionné
-        if (selectedAthlete?.id === athleteId) {
-          setSelectedAthlete(data.athlete)
-        }
+
+      if (!response.ok) {
+        if (response.status === 401) { toast.error("Session expirée, reconnectez-vous"); return }
+        if (response.status === 403) { toast.error("Accès refusé"); return }
+        throw new Error("Erreur lors de la validation")
       }
+
+      toast.success(valide ? "Athlète validé avec succès" : "Athlète refusé avec succès")
+      setValidationDialogOpen(false)
+      setRefusalReason("")
+      fetchAthletes()
     } catch (error) {
       toast.error("Erreur lors de la validation")
       console.error(error)
@@ -198,25 +194,19 @@ export default function OfficialPage() {
   // Envoyer un message à un athlète
   const handleSendMessage = async () => {
     if (!selectedAthlete || !messageContent.trim()) return
-    
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/message`, {
+      const response = await fetch(`${API_BASE_URL}/commissaire/athletes/${selectedAthlete.id}/message`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({
-          id: selectedAthlete.id,
-          message: messageContent.trim()
-        })
+        body: JSON.stringify({ contenu: messageContent.trim() })
       })
-      
+
       if (!response.ok) throw new Error("Erreur lors de l'envoi du message")
-      
-      const data = await response.json()
-      if (data.success) {
-        toast.success("Message envoyé avec succès")
-        setMessageDialogOpen(false)
-        setMessageContent("")
-      }
+
+      toast.success("Message envoyé avec succès")
+      setMessageDialogOpen(false)
+      setMessageContent("")
     } catch (error) {
       toast.error("Erreur lors de l'envoi du message")
       console.error(error)
@@ -226,22 +216,26 @@ export default function OfficialPage() {
   // Ouvrir les documents d'un athlète
   const handleViewDocuments = async (athleteId: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/doc/${athleteId}`, {
+      const response = await fetch(`${API_BASE_URL}/commissaire/athletes/${athleteId}/doc`, {
         headers: getAuthHeaders()
       })
       if (!response.ok) throw new Error("Erreur lors du chargement des documents")
-      
+
       const data = await response.json()
-      if (data.success) {
-        const athlete = athletes.find(a => a.id === athleteId)
-        if (athlete) {
-          setSelectedAthlete(athlete)
-          setViewDocumentsDialogOpen(true)
-        }
+      const athlete = athletes.find(a => a.id === athleteId)
+      if (athlete) {
+        // Merge docs from response if available
+        const updated = { ...athlete, docs: data?.docs ?? athlete.docs }
+        setSelectedAthlete(updated as Athlete)
+        setViewDocumentsDialogOpen(true)
       }
     } catch (error) {
-      toast.error("Erreur lors du chargement des documents")
-      console.error(error)
+      // Fallback: show current athlete data without re-fetching docs
+      const athlete = athletes.find(a => a.id === athleteId)
+      if (athlete) {
+        setSelectedAthlete(athlete)
+        setViewDocumentsDialogOpen(true)
+      }
     }
   }
 

@@ -70,7 +70,7 @@ export default function CommissaireEquipesPage() {
   const fetchEquipes = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/equipes`, {
+      const response = await fetch(`${API_BASE_URL}/commissaire/equipes`, {
         headers: getAuthHeaders()
       })
       if (!response.ok) throw new Error("Erreur lors du chargement des equipes")
@@ -114,7 +114,7 @@ export default function CommissaireEquipesPage() {
 
   const fetchAthletes = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes`, {
+      const response = await fetch(`${API_BASE_URL}/commissaire/athletes`, {
         headers: getAuthHeaders()
       })
       if (!response.ok) throw new Error("Erreur lors du chargement des athletes")
@@ -154,7 +154,7 @@ export default function CommissaireEquipesPage() {
     }
     try {
       setAssigning(true)
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/equipes/${selectedEquipeId}/athletes`, {
+      const response = await fetch(`${API_BASE_URL}/commissaire/equipes/${selectedEquipeId}/athletes`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({ athleteIds: [Number(selectedAthleteId)] })
@@ -184,7 +184,7 @@ export default function CommissaireEquipesPage() {
     }
     try {
       setCreating(true)
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/equipes`, {
+      const response = await fetch(`${API_BASE_URL}/commissaire/equipes`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({ nom: newEquipeNom.trim(), pays: newEquipePays.trim() })
@@ -224,7 +224,7 @@ export default function CommissaireEquipesPage() {
     if (!confirmed) return
     try {
       setDeletingId(equipe.id)
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/equipes/${equipe.id}`, {
+      const response = await fetch(`${API_BASE_URL}/commissaire/equipes/${equipe.id}`, {
         method: "DELETE",
         headers: getAuthHeaders()
       })

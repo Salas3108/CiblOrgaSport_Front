@@ -170,6 +170,104 @@ export async function adminAddEpreuveToCompetition(competitionId: number, epreuv
   });
 }
 
+// ========== PARTICIPANT ASSIGNMENT ==========
+export async function assignAthletesBulk(epreuveId: number, athleteIds: number[]) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/athletes/bulk`, {
+    method: 'POST',
+    body: JSON.stringify({ athleteIds })
+  });
+}
+
+export async function assignAthleteToEpreuve(epreuveId: number, athleteId: number) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/athletes`, {
+    method: 'POST',
+    body: JSON.stringify({ athleteId })
+  });
+}
+
+export async function assignEquipesToEpreuve(epreuveId: number, equipeIds: number[]) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/equipes`, {
+    method: 'POST',
+    body: JSON.stringify({ equipeIds })
+  });
+}
+
+export async function getEpreuveAthletes(epreuveId: number) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/athletes`);
+}
+
+export async function getEpreuveEquipes(epreuveId: number) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/equipes`);
+}
+
+export async function getAthleteEpreuves(athleteId: number) {
+  return fetchAPI(`${GATEWAY}/epreuves/athletes/${athleteId}`);
+}
+
+// ========== PARTICIPANTS-SERVICE ==========
+export async function getAthletesValides() {
+  return fetchAPI(`${GATEWAY}/commissaire/athletes/valides`);
+}
+
+export async function getAllAthletes() {
+  return fetchAPI(`${GATEWAY}/commissaire/athletes`);
+}
+
+export async function getAthleteInfo(id: number) {
+  return fetchAPI(`${GATEWAY}/commissaire/athletes/${id}/info`);
+}
+
+export async function validerAthlete(id: number, valide: boolean, motifRefus: string | null = null) {
+  return fetchAPI(`${GATEWAY}/commissaire/athletes/${id}/validation`, {
+    method: 'POST',
+    body: JSON.stringify({ valide, message: valide ? 'Dossier validé' : motifRefus, motifRefus })
+  });
+}
+
+export async function envoyerMessage(id: number, contenu: string) {
+  return fetchAPI(`${GATEWAY}/commissaire/athletes/${id}/message`, {
+    method: 'POST',
+    body: JSON.stringify({ contenu })
+  });
+}
+
+export async function getAllEquipes() {
+  return fetchAPI(`${GATEWAY}/commissaire/equipes`);
+}
+
+export async function getEquipeById(id: number) {
+  return fetchAPI(`${GATEWAY}/commissaire/equipes/${id}`);
+}
+
+export async function createEquipe(data: { nom: string; pays: string }) {
+  return fetchAPI(`${GATEWAY}/commissaire/equipes`, {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function updateEquipe(id: number, data: { nom: string; pays: string }) {
+  return fetchAPI(`${GATEWAY}/commissaire/equipes/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function deleteEquipe(id: number) {
+  return fetchAPI(`${GATEWAY}/commissaire/equipes/${id}`, { method: 'DELETE' });
+}
+
+export async function assignAthletesToEquipe(equipeId: number, athleteIds: number[]) {
+  return fetchAPI(`${GATEWAY}/commissaire/equipes/${equipeId}/athletes`, {
+    method: 'POST',
+    body: JSON.stringify({ athleteIds })
+  });
+}
+
+export async function getEpreuveAssignments() {
+  return fetchAPI(`${GATEWAY}/commissaire/epreuves/assignments`);
+}
+
 export default { 
   getEvents, 
   getEventById,
