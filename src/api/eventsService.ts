@@ -1,5 +1,7 @@
 const GATEWAY = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
 
+type ApiError = Error & { status?: number };
+
 // Helper function for API calls
 async function fetchAPI(url: string, options?: RequestInit) {
   const token = localStorage.getItem('token');
@@ -14,13 +16,52 @@ async function fetchAPI(url: string, options?: RequestInit) {
   const text = await res.text();
   try {
     const data = JSON.parse(text);
-    if (!res.ok) throw new Error(data?.message || text);
+    if (!res.ok) {
+      const error = new Error(data?.message || text || `Erreur ${res.status}`) as ApiError;
+      error.status = res.status;
+      throw error;
+    }
     return data;
   } catch (e) {
-    if (!res.ok) throw new Error(text || `Erreur ${res.status}`);
+    if (!res.ok) {
+      const error = new Error(text || `Erreur ${res.status}`) as ApiError;
+      error.status = res.status;
+      throw error;
+    }
     return text ? JSON.parse(text) : null;
   }
 }
+
+const isNotFoundError = (error: unknown) => {
+  const status = (error as ApiError | undefined)?.status;
+  if (status === 404) return true;
+
+  const message = String((error as { message?: string } | undefined)?.message || error || '').toLowerCase();
+  return message.includes('404') || message.includes('not found');
+};
+
+const normalizeCompetition = (item: any) => {
+  const dateDebut = item?.dateDebut ?? item?.startDate ?? item?.dateStart ?? item?.date;
+  const dateFin = item?.dateFin ?? item?.endDate ?? item?.dateEnd ?? item?.date;
+
+  return {
+    ...item,
+    id: item?.id ?? item?.idCompetition ?? item?.competitionId,
+    name: item?.name ?? item?.nomCompetition ?? item?.nom,
+    dateDebut,
+    dateFin,
+    date: item?.date ?? dateDebut,
+    type: item?.type ?? item?.discipline ?? item?.paysHote ?? 'Competition',
+    eventId: item?.eventId ?? item?.event_id ?? item?.event?.id ?? item?.idEvenement
+  };
+};
+
+const normalizeCompetitionList = (payload: any) =>
+  Array.isArray(payload)
+    ? payload
+        .map(normalizeCompetition)
+        .filter((competition) => competition?.id !== undefined && competition?.id !== null)
+    : [];
 
 // ========== EVENTS ==========
 export async function getEvents() {
@@ -53,11 +94,31 @@ export async function deleteEvent(id: number) {
 
 // ========== COMPETITIONS ==========
 export async function getCompetitions() {
-  return fetchAPI(`${GATEWAY}/competitions`);
+  try {
+    const data = await fetchAPI(`${GATEWAY}/competitions`);
+    return normalizeCompetitionList(data);
+  } catch (error) {
+    if (!isNotFoundError(error)) {
+      throw error;
+    }
+
+    const data = await fetchAPI(`${GATEWAY}/events`);
+    return normalizeCompetitionList(data);
+  }
 }
 
 export async function getCompetitionById(id: number) {
-  return fetchAPI(`${GATEWAY}/competitions/${id}`);
+  try {
+    const data = await fetchAPI(`${GATEWAY}/competitions/${id}`);
+    return normalizeCompetition(data);
+  } catch (error) {
+    if (!isNotFoundError(error)) {
+      throw error;
+    }
+
+    const data = await fetchAPI(`${GATEWAY}/events/${id}`);
+    return normalizeCompetition(data);
+  }
 }
 
 export async function createCompetition(competition: any) {

@@ -9,6 +9,7 @@ export const apiBases = {
   events: GATEWAY,
   incidents: GATEWAY,
   billetterie: GATEWAY,
+  notifications: GATEWAY,
 };
 
 // Shared Axios instance
