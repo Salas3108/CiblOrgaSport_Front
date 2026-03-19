@@ -35,8 +35,10 @@ interface Athlete {
   pays: string
   valide: boolean
   docs: {
-    certificatMedical: string | null
-    passport: string | null
+    certificatMedicalUrl?: string | null
+    passportUrl?: string | null
+    certificatMedical?: string | null
+    passport?: string | null
   }
   observation: string
 }
@@ -86,6 +88,17 @@ const getAuthHeaders = () => {
   return token
     ? { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }
     : { "Content-Type": "application/json" }
+}
+
+const getAuthToken = () => {
+  if (typeof window === "undefined") return null
+  return localStorage.getItem("token") || localStorage.getItem("accessToken")
+}
+
+const resolveDocUrl = (docUrl?: string | null) => {
+  if (!docUrl) return null
+  if (docUrl.startsWith("http://") || docUrl.startsWith("https://")) return docUrl
+  return `${API_BASE_URL}${docUrl.startsWith("/") ? "" : "/"}${docUrl}`
 }
 
 const getUserIdFromToken = (): number | null => {
@@ -411,28 +424,27 @@ export default function AthletePage() {
     
     try {
       setUploading(true)
-      
-      // Simuler l'upload - dans la réalité, vous enverriez le fichier
-      const filename = `${documentType}_${athlete.prenom}_${athlete.nom}.pdf`
-      
-      const response = await fetch(`${API_BASE_URL}/api/athlete/doc`, {
+
+      const token = getAuthToken()
+      if (!token) throw new Error("Token manquant")
+
+      const formData = new FormData()
+      formData.append(documentType, documentFile)
+
+      const response = await fetch(`${API_BASE_URL}/api/athlete/${athlete.id}/doc/upload`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: athlete.id,
-          type: documentType,
-          filename: filename
-        })
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
       })
       
       if (!response.ok) throw new Error("Erreur lors de l'upload")
       
       const data = await response.json()
-      if (data.success) {
-        setAthlete(data.athlete)
-        setDocumentFile(null)
-        alert("Document uploadé avec succès!")
-      }
+      setAthlete(data.athlete ?? data)
+      setDocumentFile(null)
+      alert("Document uploadé avec succès!")
     } catch (err) {
       alert("Erreur lors de l'upload: " + (err instanceof Error ? err.message : "Erreur inconnue"))
     } finally {
@@ -553,15 +565,44 @@ export default function AthletePage() {
   }
 
   // Télécharger un document
-  const handleDownloadDocument = (filename: string | null, type: string) => {
-    if (!filename) {
+  const handleDownloadDocument = async (docUrl: string | null | undefined, type: string) => {
+    const resolvedUrl = resolveDocUrl(docUrl)
+    if (!resolvedUrl) {
       alert("Document non disponible")
       return
     }
-    
-    // Simuler le téléchargement
-    alert(`Téléchargement du ${type}: ${filename}`)
-    // Dans la réalité, vous feriez un lien vers le fichier
+
+    try {
+      const token = getAuthToken()
+      if (!token) throw new Error("Token manquant")
+
+      const response = await fetch(resolvedUrl, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Erreur ${response.status}`)
+      }
+
+      const blob = await response.blob()
+      const contentDisposition = response.headers.get("Content-Disposition") || ""
+      const fileNameMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
+      const fileName = fileNameMatch?.[1] || `${type}.pdf`
+
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = objectUrl
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+    } catch (err) {
+      alert("Erreur de téléchargement: " + (err instanceof Error ? err.message : "Erreur inconnue"))
+    }
   }
 
   // Charger un athlète spécifique (commissaire)
@@ -763,15 +804,15 @@ export default function AthletePage() {
                             <div>
                               <div className="font-medium">Certificat Médical</div>
                               <div className="text-sm text-muted-foreground">
-                                {athlete.docs.certificatMedical || "Non fourni"}
+                                {athlete.docs.certificatMedicalUrl ? "Document disponible" : "Non fourni"}
                               </div>
                             </div>
                             <div className="flex gap-2">
-                              {athlete.docs.certificatMedical && (
+                              {athlete.docs.certificatMedicalUrl && (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleDownloadDocument(athlete.docs.certificatMedical, "certificat médical")}
+                                  onClick={() => handleDownloadDocument(athlete.docs.certificatMedicalUrl, "certificat-medical")}
                                 >
                                   <Download className="h-4 w-4 mr-2" />
                                   Télécharger
@@ -784,15 +825,15 @@ export default function AthletePage() {
                             <div>
                               <div className="font-medium">Passeport</div>
                               <div className="text-sm text-muted-foreground">
-                                {athlete.docs.passport || "Non fourni"}
+                                {athlete.docs.passportUrl ? "Document disponible" : "Non fourni"}
                               </div>
                             </div>
                             <div className="flex gap-2">
-                              {athlete.docs.passport && (
+                              {athlete.docs.passportUrl && (
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleDownloadDocument(athlete.docs.passport, "passeport")}
+                                  onClick={() => handleDownloadDocument(athlete.docs.passportUrl, "passport")}
                                 >
                                   <Download className="h-4 w-4 mr-2" />
                                   Télécharger
@@ -1031,11 +1072,11 @@ export default function AthletePage() {
                             <div>
                               <h3 className="font-medium">Certificat Médical</h3>
                               <p className="text-sm text-muted-foreground">
-                                {athlete.docs.certificatMedical || "Document non fourni"}
+                                {athlete.docs.certificatMedicalUrl ? "Document disponible" : "Document non fourni"}
                               </p>
                             </div>
-                            <Badge variant={athlete.docs.certificatMedical ? "outline" : "destructive"}>
-                              {athlete.docs.certificatMedical ? "Fourni" : "Manquant"}
+                            <Badge variant={athlete.docs.certificatMedicalUrl ? "outline" : "destructive"}>
+                              {athlete.docs.certificatMedicalUrl ? "Fourni" : "Manquant"}
                             </Badge>
                           </div>
                           <div className="flex gap-2">
@@ -1055,13 +1096,13 @@ export default function AthletePage() {
                               <Button className="w-full" variant="outline" asChild>
                                 <span>
                                   <Upload className="h-4 w-4 mr-2" />
-                                  {athlete.docs.certificatMedical ? "Remplacer" : "Télécharger"}
+                                  {athlete.docs.certificatMedicalUrl ? "Remplacer" : "Télécharger"}
                                 </span>
                               </Button>
                             </label>
-                            {athlete.docs.certificatMedical && (
+                            {athlete.docs.certificatMedicalUrl && (
                               <Button
-                                onClick={() => handleDownloadDocument(athlete.docs.certificatMedical, "certificat médical")}
+                                onClick={() => handleDownloadDocument(athlete.docs.certificatMedicalUrl, "certificat-medical")}
                                 variant="outline"
                                 className="flex-1"
                               >
@@ -1078,11 +1119,11 @@ export default function AthletePage() {
                             <div>
                               <h3 className="font-medium">Passeport</h3>
                               <p className="text-sm text-muted-foreground">
-                                {athlete.docs.passport || "Document non fourni"}
+                                {athlete.docs.passportUrl ? "Document disponible" : "Document non fourni"}
                               </p>
                             </div>
-                            <Badge variant={athlete.docs.passport ? "outline" : "destructive"}>
-                              {athlete.docs.passport ? "Fourni" : "Manquant"}
+                            <Badge variant={athlete.docs.passportUrl ? "outline" : "destructive"}>
+                              {athlete.docs.passportUrl ? "Fourni" : "Manquant"}
                             </Badge>
                           </div>
                           <div className="flex gap-2">
@@ -1102,13 +1143,13 @@ export default function AthletePage() {
                               <Button className="w-full" variant="outline" asChild>
                                 <span>
                                   <Upload className="h-4 w-4 mr-2" />
-                                  {athlete.docs.passport ? "Remplacer" : "Télécharger"}
+                                  {athlete.docs.passportUrl ? "Remplacer" : "Télécharger"}
                                 </span>
                               </Button>
                             </label>
-                            {athlete.docs.passport && (
+                            {athlete.docs.passportUrl && (
                               <Button
-                                onClick={() => handleDownloadDocument(athlete.docs.passport, "passeport")}
+                                onClick={() => handleDownloadDocument(athlete.docs.passportUrl, "passport")}
                                 variant="outline"
                                 className="flex-1"
                               >

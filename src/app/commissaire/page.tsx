@@ -46,8 +46,10 @@ interface Athlete {
   valide: boolean
   equipeNom?: string | null
   docs: {
-    certificatMedical: string | null
-    passport: string | null
+    certificatMedicalUrl?: string | null
+    passportUrl?: string | null
+    certificatMedical?: string | null
+    passport?: string | null
   }
   observation: string
 }
@@ -66,6 +68,69 @@ const getAuthHeaders = () => {
   return token
     ? { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }
     : { "Content-Type": "application/json" }
+}
+
+const getAuthToken = () => {
+  if (typeof window === "undefined") return null
+  return localStorage.getItem("token") || localStorage.getItem("accessToken")
+}
+
+const resolveDocUrl = (docUrl?: string | null) => {
+  if (!docUrl) return null
+  if (docUrl.startsWith("http://") || docUrl.startsWith("https://")) return docUrl
+  return `${API_BASE_URL}${docUrl.startsWith("/") ? "" : "/"}${docUrl}`
+}
+
+const hasDoc = (athlete: Athlete | null, docType: "certificatMedical" | "passport") => {
+  if (!athlete?.docs) return false
+  if (docType === "certificatMedical") {
+    return Boolean(athlete.docs.certificatMedicalUrl || athlete.docs.certificatMedical)
+  }
+  return Boolean(athlete.docs.passportUrl || athlete.docs.passport)
+}
+
+const getDocDownloadUrl = (athlete: Athlete | null, docType: "certificatMedical" | "passport") => {
+  if (!athlete?.docs) return null
+
+  if (docType === "certificatMedical") {
+    const explicit = resolveDocUrl(athlete.docs.certificatMedicalUrl)
+    if (explicit) return explicit
+    if (athlete.docs.certificatMedical) {
+      return `${API_BASE_URL}/api/athlete/${athlete.id}/doc/certificatMedical`
+    }
+    return null
+  }
+
+  const explicit = resolveDocUrl(athlete.docs.passportUrl)
+  if (explicit) return explicit
+  if (athlete.docs.passport) {
+    return `${API_BASE_URL}/api/athlete/${athlete.id}/doc/passport`
+  }
+  return null
+}
+
+const probeDocAvailability = async (
+  athleteId: number,
+  docType: "certificatMedical" | "passport"
+): Promise<string | null> => {
+  const token = getAuthToken()
+  if (!token) return null
+
+  const url = `${API_BASE_URL}/api/athlete/${athleteId}/doc/${docType}`
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    })
+
+    if (!response.ok) return null
+    await response.body?.cancel()
+    return url
+  } catch {
+    return null
+  }
 }
 
 export default function OfficialPage() {
@@ -191,29 +256,27 @@ export default function OfficialPage() {
   // Valider un athlète
   const handleValidateAthlete = async (athleteId: number, valide: boolean, reason?: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/validation`, {
+      const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes/${athleteId}/validation`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          id: athleteId,
           valide,
-          motif: reason
+          motifRefus: reason,
+          message: reason
         })
       })
       
       if (!response.ok) throw new Error("Erreur lors de la validation")
       
       const data = await response.json()
-      if (data.success) {
-        toast.success(valide ? "Athlète validé avec succès" : "Athlète refusé avec succès")
-        setValidationDialogOpen(false)
-        setRefusalReason("")
-        fetchAthletes() // Rafraîchir la liste
-        
-        // Réinitialiser l'athlète sélectionné
-        if (selectedAthlete?.id === athleteId) {
-          setSelectedAthlete(data.athlete)
-        }
+      toast.success(valide ? "Athlète validé avec succès" : "Athlète refusé avec succès")
+      setValidationDialogOpen(false)
+      setRefusalReason("")
+      fetchAthletes() // Rafraîchir la liste
+      
+      // Réinitialiser l'athlète sélectionné
+      if (selectedAthlete?.id === athleteId) {
+        setSelectedAthlete(data)
       }
     } catch (error) {
       toast.error("Erreur lors de la validation")
@@ -226,23 +289,19 @@ export default function OfficialPage() {
     if (!selectedAthlete || !messageContent.trim()) return
     
     try {
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/message`, {
+      const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes/${selectedAthlete.id}/message`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          id: selectedAthlete.id,
-          message: messageContent.trim()
+          contenu: messageContent.trim()
         })
       })
       
       if (!response.ok) throw new Error("Erreur lors de l'envoi du message")
-      
-      const data = await response.json()
-      if (data.success) {
-        toast.success("Message envoyé avec succès")
-        setMessageDialogOpen(false)
-        setMessageContent("")
-      }
+
+      toast.success("Message envoyé avec succès")
+      setMessageDialogOpen(false)
+      setMessageContent("")
     } catch (error) {
       toast.error("Erreur lors de l'envoi du message")
       console.error(error)
@@ -251,39 +310,102 @@ export default function OfficialPage() {
 
   // Ouvrir les documents d'un athlète
   const handleViewDocuments = async (athleteId: number) => {
+    const localAthlete = athletes.find(a => a.id === athleteId)
+    if (localAthlete) {
+      setSelectedAthlete(localAthlete)
+    }
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/commissaire/doc/${athleteId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes/${athleteId}/info`, {
         headers: getAuthHeaders()
       })
-      if (!response.ok) throw new Error("Erreur lors du chargement des documents")
-      
-      const data = await response.json()
-      if (data.success) {
-        const athlete = athletes.find(a => a.id === athleteId)
-        if (athlete) {
-          setSelectedAthlete(athlete)
-          setViewDocumentsDialogOpen(true)
+
+      if (response.ok) {
+        const data = await response.json()
+        const remoteAthlete = data?.athlete ?? data
+        if (remoteAthlete?.id) {
+          setSelectedAthlete(remoteAthlete)
         }
       }
+
+      const current = localAthlete ?? selectedAthlete
+      const missingDocs = !current?.docs || (!hasDoc(current, "certificatMedical") && !hasDoc(current, "passport"))
+      if (missingDocs) {
+        const [certUrl, passUrl] = await Promise.all([
+          probeDocAvailability(athleteId, "certificatMedical"),
+          probeDocAvailability(athleteId, "passport")
+        ])
+
+        if (certUrl || passUrl) {
+          setSelectedAthlete(prev => {
+            if (!prev || prev.id !== athleteId) return prev
+            return {
+              ...prev,
+              docs: {
+                ...prev.docs,
+                certificatMedicalUrl: prev.docs?.certificatMedicalUrl || certUrl,
+                passportUrl: prev.docs?.passportUrl || passUrl
+              }
+            }
+          })
+        }
+      }
+
+      setViewDocumentsDialogOpen(true)
     } catch (error) {
-      toast.error("Erreur lors du chargement des documents")
+      setViewDocumentsDialogOpen(true)
+      if (!localAthlete) {
+        toast.error("Impossible de charger les détails de l'athlète")
+      }
       console.error(error)
     }
   }
 
   // Télécharger un document
-  const handleDownloadDocument = (filename: string | null, type: string) => {
-    if (!filename) {
+  const handleDownloadDocument = async (docUrl: string | null | undefined, type: string) => {
+    const resolvedUrl = resolveDocUrl(docUrl)
+    if (!resolvedUrl) {
       toast.error("Document non disponible")
       return
     }
-    
-    // Simuler le téléchargement
-    toast.info(`Téléchargement du ${type}...`)
-    const link = document.createElement('a')
-    link.href = `#`
-    link.download = filename
-    link.click()
+
+    const token = getAuthToken()
+    if (!token) {
+      toast.error("Token manquant. Veuillez vous reconnecter.")
+      return
+    }
+
+    try {
+      toast.info(`Téléchargement du ${type}...`)
+      const response = await fetch(resolvedUrl, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Erreur ${response.status}`)
+      }
+
+      const blob = await response.blob()
+      const contentDisposition = response.headers.get("Content-Disposition") || ""
+      const fileNameMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
+      const fileName = fileNameMatch?.[1] || `${type}.pdf`
+
+      const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = objectUrl
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(objectUrl)
+      toast.success(`${type} téléchargé`)
+    } catch (error) {
+      console.error(error)
+      toast.error(`Impossible de télécharger le ${type}`)
+    }
   }
 
   return (
@@ -483,7 +605,7 @@ export default function OfficialPage() {
                   <CardHeader>
                     <CardTitle>Détails de l'athlète</CardTitle>
                     <CardDescription>
-                      {selectedAthlete ? `Informations de ${selectedAthlete.prenom} ${selectedAthlete.nom}` : "Sélectionnez un athlète"}
+                      {selectedAthlete ? `Informations de ${getAthleteDisplayName(selectedAthlete)}` : "Sélectionnez un athlète"}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -544,15 +666,15 @@ export default function OfficialPage() {
                                 <div>
                                   <div className="font-medium">Certificat Médical</div>
                                   <div className="text-sm text-muted-foreground">
-                                    {selectedAthlete.docs.certificatMedical || "Non fourni"}
+                                    {hasDoc(selectedAthlete, "certificatMedical") ? "Document disponible" : "Non fourni"}
                                   </div>
                                 </div>
                               </div>
-                              {selectedAthlete.docs.certificatMedical && (
+                              {hasDoc(selectedAthlete, "certificatMedical") && (
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => handleDownloadDocument(selectedAthlete.docs.certificatMedical, "certificat médical")}
+                                  onClick={() => handleDownloadDocument(getDocDownloadUrl(selectedAthlete, "certificatMedical"), "certificat-medical")}
                                 >
                                   <Download className="h-4 w-4" />
                                 </Button>
@@ -565,15 +687,15 @@ export default function OfficialPage() {
                                 <div>
                                   <div className="font-medium">Passeport</div>
                                   <div className="text-sm text-muted-foreground">
-                                    {selectedAthlete.docs.passport || "Non fourni"}
+                                    {hasDoc(selectedAthlete, "passport") ? "Document disponible" : "Non fourni"}
                                   </div>
                                 </div>
                               </div>
-                              {selectedAthlete.docs.passport && (
+                              {hasDoc(selectedAthlete, "passport") && (
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  onClick={() => handleDownloadDocument(selectedAthlete.docs.passport, "passeport")}
+                                  onClick={() => handleDownloadDocument(getDocDownloadUrl(selectedAthlete, "passport"), "passport")}
                                 >
                                   <Download className="h-4 w-4" />
                                 </Button>
