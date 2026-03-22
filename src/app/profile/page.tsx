@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { deleteMyAccount } from "../../api/authService"
 
 type StoredUser = {
   username?: string
@@ -57,6 +58,25 @@ export default function ProfilePage() {
   const [bio, setBio] = useState("")
   const [editingBio, setEditingBio] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  async function handleDeleteAccount() {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.")) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteMyAccount();
+      // Nettoyer le localStorage et rediriger
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = "/login";
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Erreur inconnue");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   // Load photo + display name from localStorage
   useEffect(() => {
@@ -282,6 +302,18 @@ export default function ProfilePage() {
 
         {/* Editable fields */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 divide-y divide-gray-100">
+        {/* Droit à l'oubli : suppression du compte */}
+        <div className="px-6 py-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Droit à l'oubli</p>
+          <button
+            className="py-2 px-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors disabled:opacity-60"
+            onClick={handleDeleteAccount}
+            disabled={deleting}
+          >
+            {deleting ? "Suppression en cours..." : "Supprimer mon compte"}
+          </button>
+          {deleteError && <p className="text-red-600 text-sm mt-2">{deleteError}</p>}
+        </div>
 
           {/* Display name */}
           <div className="px-6 py-4">
