@@ -16,6 +16,31 @@ function getAdminAuthToken() {
   );
 }
 
+// Supprimer le compte utilisateur connecté (droit à l'oubli)
+export async function deleteMyAccount() {
+  const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+  if (!token) throw new Error('Token manquant');
+  const res = await fetch('http://localhost:8080/auth/delete-account', {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  const text = await res.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    data = text;
+  }
+  if (!res.ok) {
+    const message = typeof data === 'string' ? data : (data?.message || 'Erreur API');
+    throw new Error(message);
+  }
+  return data;
+}
+
 // Récupérer la liste des athlètes (ADMIN)
 export async function fetchAthletes(validated?: boolean) {
   const token = localStorage.getItem('token');
