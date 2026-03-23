@@ -60,6 +60,8 @@ export default function ProfilePage() {
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   async function handleDeleteAccount() {
     if (!window.confirm("Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.")) return;
@@ -175,6 +177,73 @@ export default function ProfilePage() {
     setPhoto(null)
     localStorage.removeItem("profile_photo")
     if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  function downloadFile(filename: string, data: Blob | string, mime = "application/json") {
+    const blob = data instanceof Blob ? data : new Blob([data], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleExport() {
+    setExportError(null)
+    setExporting(true)
+    try {
+      const token =
+        localStorage.getItem("token") ||
+        localStorage.getItem("accessToken") ||
+        sessionStorage.getItem("token") ||
+        sessionStorage.getItem("accessToken")
+
+      const username = getUsernameFromToken(token) || user?.username
+
+      // Try backend export endpoint first (if available)
+      if (username) {
+        try {
+          const res = await fetch(
+            `http://localhost:8080/auth/user/export/${encodeURIComponent(username)}`,
+            { headers: getAuthHeaders() }
+          )
+          if (res.ok) {
+            const contentType = res.headers.get("content-type") || "application/json"
+            const blob = await res.blob()
+            const ext = contentType.includes("json") ? "json" : "zip"
+            downloadFile(`export-${username}.${ext}`, blob, contentType)
+            setExporting(false)
+            return
+          }
+        } catch {
+          // backend not available or errored — fallback to client export
+        }
+      }
+
+      // Client-side export: assemble available profile data + local extras
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        account: user ?? null,
+        displayName: localStorage.getItem("profile_display_name") || null,
+        bio: localStorage.getItem("profile_bio") || null,
+        photoDataUrl: localStorage.getItem("profile_photo") || null,
+        localStorageSnapshot: {
+          // exclude tokens for security
+          profile_display_name: localStorage.getItem("profile_display_name"),
+          profile_bio: localStorage.getItem("profile_bio"),
+          profile_photo: localStorage.getItem("profile_photo"),
+        },
+      }
+
+      downloadFile(`export-${user?.username ?? "me"}.json`, JSON.stringify(exportData, null, 2), "application/json")
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExporting(false)
+    }
   }
 
   const roleInfo = user?.role ? (ROLE_LABELS[user.role] ?? { label: user.role, color: "bg-gray-100 text-gray-700" }) : null
@@ -434,6 +503,13 @@ export default function ProfilePage() {
 
         {/* Actions */}
         <div className="flex gap-3">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="py-2.5 px-4 text-sm text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+          >
+            {exporting ? "Export en cours…" : "Exporter mes données"}
+          </button>
           <Link href="/" className="flex-1">
             <button className="w-full py-2.5 text-sm text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors font-medium">
               ← Retour à l'accueil
