@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Clock, MapPin, Calendar, RefreshCw, Trash2, User, Upload, Edit2 } from "lucide-react"
+import { Clock, MapPin, Calendar, RefreshCw, Trash2, User, Upload, Edit2, Plus, Users, Download, Globe, AlertTriangle, FileText } from "lucide-react"
 
 // Mapping des types de tâches du backend avec descriptions et paramètres par défaut
 interface TaskTemplate {
@@ -400,7 +400,7 @@ export default function VolunteerProgramImport() {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            ➕ Créer une tâche
+            <Plus className="inline mr-1 h-4 w-4 align-text-bottom" />Créer une tâche
           </button>
           <button
             onClick={() => setActiveTab('import')}
@@ -410,7 +410,7 @@ export default function VolunteerProgramImport() {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            📥 Importer des tâches
+            <Download className="inline mr-1 h-4 w-4 align-text-bottom" />Importer des tâches
           </button>
           <button
             onClick={() => setActiveTab('manage')}
@@ -420,7 +420,7 @@ export default function VolunteerProgramImport() {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            👥 Assigner les tâches
+            <Users className="inline mr-1 h-4 w-4 align-text-bottom" />Assigner les tâches
           </button>
         </nav>
       </div>
@@ -559,7 +559,7 @@ export default function VolunteerProgramImport() {
             <div className="space-y-4">
               <div className="border-2 border-dashed rounded-lg p-8">
                 <div className="text-center space-y-3">
-                  <div className="text-4xl">📄</div>
+                  <div className="flex justify-center"><FileText className="h-10 w-10 text-gray-400" /></div>
                   <div>
                     <Label className="cursor-pointer">
                       <span className="font-semibold text-blue-600 hover:text-blue-700">Cliquez pour sélectionner</span>
@@ -661,7 +661,7 @@ export default function VolunteerProgramImport() {
                             </div>
                             {task.requiredLanguages && task.requiredLanguages.length > 0 && (
                               <div className="flex items-center gap-1">
-                                🌍 {task.requiredLanguages.join(", ")}
+                                <Globe className="inline mr-1 h-4 w-4 align-text-bottom text-gray-500" />{task.requiredLanguages.join(", ")}
                               </div>
                             )}
                             {(task.assignedTo || (task.assignedCount ?? 0) > 0) && (
@@ -725,7 +725,7 @@ export default function VolunteerProgramImport() {
                   Assignation de volontaire
                 </CardTitle>
                 <CardDescription className={isVolunteerFallback ? 'text-orange-800' : 'text-blue-800'}>
-                  {isVolunteerFallback ? '⚠️ Aucun volontaire ne correspond parfaitement - Affichage de tous les volontaires' : 'Sélectionnez un volontaire approprié pour cette tâche'}
+                  {isVolunteerFallback ? <><AlertTriangle className="inline mr-1 h-4 w-4 text-orange-500 align-text-bottom" />Aucun volontaire ne correspond parfaitement - Affichage de tous les volontaires</> : 'Sélectionnez un volontaire approprié pour cette tâche'}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -759,7 +759,7 @@ export default function VolunteerProgramImport() {
                               <p className="text-sm text-muted-foreground mb-2">{volunteer.email}</p>
                               {volunteer.languages && volunteer.languages.length > 0 && (
                                 <p className="text-xs text-blue-600 mb-2">
-                                  🌍 Langues: {volunteer.languages.join(", ")}
+                                  <Globe className="inline mr-1 h-4 w-4 align-text-bottom text-gray-500" />Langues: {volunteer.languages.join(", ")}
                                 </p>
                               )}
                               

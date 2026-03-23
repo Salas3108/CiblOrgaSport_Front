@@ -40,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Mon équipe",        href: "/athlete/mon-equipe",          icon: Users,          roles: ["athlete"] },
 
   // ── Volontaire ──
+  { label: "Compléter profil",  href: "/volunteer/profile",           icon: Users,          roles: ["volunteer"] },
   { label: "Mon programme",     href: "/volunteer/program",           icon: Calendar,       roles: ["volunteer"] },
 
   // ── Spectateur ──
