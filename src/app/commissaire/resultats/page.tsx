@@ -2,18 +2,23 @@
 
 import { useEffect, useState } from "react"
 import { Header } from "@/components/header"
-import eventsService from "@/src/api/eventsService"
+import eventsService, { getStatutParticipation, declarerForfait } from "@/src/api/eventsService"
+import { http } from "@/src/api/httpClient"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { CheckCircle, RefreshCw, Send, Trophy, Medal } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { AlertTriangle, CheckCircle, RefreshCw, Send, Trophy, Medal } from "lucide-react"
 import { toast } from "sonner"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+
+type StatutParticipation = "INSCRIT" | "EN_COURS" | "TERMINE" | "FORFAIT"
 
 interface ResultatDto {
   id: number
@@ -26,7 +31,7 @@ interface ResultatDto {
   athleteId: number | null
   equipeId: number | null
   epreuveId: number
-  statut: "EN_ATTENTE" | "VALIDE"
+  statut: "EN_ATTENTE" | "VALIDE" | "FORFAIT"
   published: boolean
   athleteNom: string | null
   athletePrenom: string | null
@@ -62,18 +67,6 @@ interface EpreuveListItem {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-const getAuthHeaders = (): Record<string, string> => {
-  if (typeof window === "undefined") return { "Content-Type": "application/json" }
-  const token =
-    localStorage.getItem("token") ||
-    localStorage.getItem("accessToken") ||
-    sessionStorage.getItem("token") ||
-    sessionStorage.getItem("accessToken")
-  return token
-    ? { "Content-Type": "application/json", Authorization: `Bearer ${token}` }
-    : { "Content-Type": "application/json" }
-}
 
 const getPlaceholder = (discipline: Discipline | undefined): string => {
   switch (discipline) {
@@ -128,7 +121,26 @@ function StatutBadge({ statut, published }: { statut: ResultatDto["statut"]; pub
     return <Badge style={{ backgroundColor: "#3b82f6", color: "#fff" }}>Publié</Badge>
   if (statut === "VALIDE")
     return <Badge className="bg-green-500 text-white hover:bg-green-500">Validé</Badge>
+  if (statut === "FORFAIT")
+    return <Badge className="bg-red-100 text-red-700 border border-red-300">FORFAIT</Badge>
   return <Badge className="bg-orange-400 text-white hover:bg-orange-400">En attente</Badge>
+}
+
+function StatutParticipationBadge({ statut }: { statut: StatutParticipation | undefined }) {
+  if (!statut) return null
+  if (statut === "INSCRIT")
+    return <Badge variant="secondary" className="text-xs">Inscrit</Badge>
+  if (statut === "EN_COURS")
+    return <Badge className="bg-orange-400 text-white text-xs hover:bg-orange-400">En cours</Badge>
+  if (statut === "TERMINE")
+    return <Badge className="bg-green-500 text-white text-xs hover:bg-green-500">Terminé</Badge>
+  // FORFAIT
+  return (
+    <Badge className="bg-red-500 text-white text-xs hover:bg-red-500 flex items-center gap-1">
+      <AlertTriangle className="h-3 w-3" />
+      Forfait
+    </Badge>
+  )
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
@@ -148,12 +160,19 @@ export default function CommissaireResultatsPage() {
   const [validating, setValidating] = useState(false)
   const [publishing, setPublishing] = useState(false)
 
+  const [statutsParticipation, setStatutsParticipation] = useState<Record<number, StatutParticipation>>({})
+  const [forfaitAthleteId, setForfaitAthleteId] = useState<number | null>(null)
+  const [forfaitRaison, setForfaitRaison] = useState("")
+  const [forfaitOpen, setForfaitOpen] = useState(false)
+  const [forfaitLoading, setForfaitLoading] = useState(false)
+
   // ── Derived state ────────────────────────────────────────────────────────────
 
   const hasResults = resultats.length > 0
   const anyPending = resultats.some((r) => r.statut === "EN_ATTENTE")
-  const allValidated = hasResults && resultats.every((r) => r.statut === "VALIDE")
-  const allPublished = hasResults && resultats.every((r) => r.published)
+  const nonForfaitResultats = resultats.filter((r) => r.statut !== "FORFAIT")
+  const allValidated = hasResults && nonForfaitResultats.length > 0 && nonForfaitResultats.every((r) => r.statut === "VALIDE")
+  const allPublished = hasResults && resultats.every((r) => r.published || r.statut === "FORFAIT")
 
   const participants =
     contexte?.typeEpreuve === "INDIVIDUELLE" ? contexte.athletes : contexte?.equipes ?? []
@@ -183,26 +202,11 @@ export default function CommissaireResultatsPage() {
       setContexte(null)
       setResultats([])
       setPerfValues({})
+      setStatutsParticipation({})
 
-      const response = await fetch(
-        `${API_BASE_URL}/resultats/commissaire/epreuves/${epreuveId}/contexte`,
-        { headers: getAuthHeaders() }
+      const { data } = await http.get<EpreuveContexteResponse>(
+        `${API_BASE_URL}/resultats/commissaire/epreuves/${epreuveId}/contexte`
       )
-      if (response.status === 401) {
-        toast.error("Session expirée, veuillez vous reconnecter")
-        return
-      }
-      if (response.status === 403) {
-        toast.error("Accès refusé")
-        return
-      }
-      if (response.status === 404) {
-        toast.error("Épreuve introuvable")
-        return
-      }
-      if (!response.ok) throw new Error(`Erreur ${response.status}`)
-
-      const data: EpreuveContexteResponse = await response.json()
       setContexte(data)
 
       // Pre-fill empty performance values for each participant
@@ -213,8 +217,21 @@ export default function CommissaireResultatsPage() {
         data.equipes.forEach((e) => { initial[e.id] = "" })
       }
       setPerfValues(initial)
+
+      // Load participation statuts for individual athletes (graceful fallback)
+      if (data.typeEpreuve === "INDIVIDUELLE" && data.athletes.length > 0) {
+        const results = await Promise.allSettled(
+          data.athletes.map((a) => getStatutParticipation(epreuveId, a.id))
+        )
+        const statuts: Record<number, StatutParticipation> = {}
+        data.athletes.forEach((a, i) => {
+          const r = results[i]
+          statuts[a.id] = r.status === "fulfilled" ? r.value.statut : "INSCRIT"
+        })
+        setStatutsParticipation(statuts)
+      }
     } catch {
-      toast.error("Impossible de charger le contexte de l'épreuve")
+      // Interceptor already showed the error toast
     } finally {
       setLoadingContexte(false)
     }
@@ -222,12 +239,9 @@ export default function CommissaireResultatsPage() {
 
   const fetchResultatsExistants = async (epreuveId: number) => {
     try {
-      const response = await fetch(
-        `${API_BASE_URL}/resultats/commissaire/epreuves/${epreuveId}`,
-        { headers: getAuthHeaders() }
+      const { data } = await http.get<ResultatDto[]>(
+        `${API_BASE_URL}/resultats/commissaire/epreuves/${epreuveId}`
       )
-      if (!response.ok) return
-      const data = await response.json()
       if (Array.isArray(data) && data.length > 0) setResultats(data)
     } catch {
       // Silently ignore — no existing results yet
@@ -239,7 +253,11 @@ export default function CommissaireResultatsPage() {
 
     const isIndividuelle = contexte.typeEpreuve === "INDIVIDUELLE"
     const performances = Object.entries(perfValues)
-      .filter(([, val]) => val.trim() !== "")
+      .filter(([id, val]) => {
+        // Skip FORFAIT athletes — backend handles them automatically
+        if (isIndividuelle && statutsParticipation[Number(id)] === "FORFAIT") return false
+        return val.trim() !== ""
+      })
       .map(([id, valeur]) =>
         isIndividuelle
           ? { athleteId: Number(id), valeurPrincipale: valeur.trim() }
@@ -253,28 +271,14 @@ export default function CommissaireResultatsPage() {
 
     try {
       setSubmitting(true)
-      const response = await fetch(
+      const { data } = await http.post<ResultatDto[]>(
         `${API_BASE_URL}/resultats/commissaire/epreuves/${contexte.epreuveId}/saisie`,
-        {
-          method: "POST",
-          headers: getAuthHeaders(),
-          body: JSON.stringify({ performances }),
-        }
+        { performances }
       )
-
-      if (response.status === 401) { toast.error("Session expirée"); return }
-      if (response.status === 403) { toast.error("Accès refusé"); return }
-
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw new Error(err.message || err.error || `Erreur ${response.status}`)
-      }
-
-      const data: ResultatDto[] = await response.json()
       setResultats(data)
       toast.success(`${data.length} performance(s) enregistrée(s)`)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erreur lors de la saisie")
+    } catch {
+      // Interceptor already showed the error toast
     } finally {
       setSubmitting(false)
     }
@@ -284,19 +288,13 @@ export default function CommissaireResultatsPage() {
     if (!contexte) return
     try {
       setValidating(true)
-      const response = await fetch(
-        `${API_BASE_URL}/resultats/commissaire/epreuves/${contexte.epreuveId}/valider-tout`,
-        { method: "POST", headers: getAuthHeaders() }
+      const { data } = await http.post<ResultatDto[]>(
+        `${API_BASE_URL}/resultats/commissaire/epreuves/${contexte.epreuveId}/valider-tout`
       )
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw new Error(err.message || `Erreur ${response.status}`)
-      }
-      const data: ResultatDto[] = await response.json()
       setResultats(data)
       toast.success("Tous les résultats ont été validés")
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erreur lors de la validation")
+    } catch {
+      // Interceptor already showed the error toast
     } finally {
       setValidating(false)
     }
@@ -306,23 +304,32 @@ export default function CommissaireResultatsPage() {
     if (!contexte) return
     try {
       setPublishing(true)
-      const response = await fetch(
-        `${API_BASE_URL}/resultats/commissaire/epreuves/${contexte.epreuveId}/publier-tout`,
-        { method: "POST", headers: getAuthHeaders() }
+      const { data } = await http.post<{ epreuveId: number; nbResultatsPublies: number; success: boolean }>(
+        `${API_BASE_URL}/resultats/commissaire/epreuves/${contexte.epreuveId}/publier-tout`
       )
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}))
-        throw new Error(err.message || "Validez tous les résultats avant de publier")
-      }
-      const data: { epreuveId: number; nbResultatsPublies: number; success: boolean } =
-        await response.json()
-      // Mark all resultats as published
       setResultats((prev) => prev.map((r) => ({ ...r, published: true })))
       toast.success(`${data.nbResultatsPublies} résultat(s) publié(s) ✓`)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erreur lors de la publication")
+    } catch {
+      // Interceptor already showed the error toast
     } finally {
       setPublishing(false)
+    }
+  }
+
+  const handleConfirmerForfait = async () => {
+    if (!contexte || !forfaitAthleteId) return
+    try {
+      setForfaitLoading(true)
+      await declarerForfait(contexte.epreuveId, forfaitAthleteId, forfaitRaison || undefined)
+      setStatutsParticipation((prev) => ({ ...prev, [forfaitAthleteId]: "FORFAIT" }))
+      toast.success("Forfait enregistré")
+      setForfaitOpen(false)
+      setForfaitRaison("")
+      fetchResultatsExistants(contexte.epreuveId)
+    } catch {
+      // Interceptor already showed the error toast (warning for 409)
+    } finally {
+      setForfaitLoading(false)
     }
   }
 
@@ -447,31 +454,45 @@ export default function CommissaireResultatsPage() {
                   <>
                     <div className="space-y-3">
                       {contexte.typeEpreuve === "INDIVIDUELLE"
-                        ? contexte.athletes.map((athlete) => (
-                            <div
-                              key={athlete.id}
-                              className="flex flex-col sm:flex-row sm:items-center gap-2"
-                            >
-                              <Label className="sm:w-56 shrink-0 font-medium">
-                                {athlete.prenom} {athlete.nom}
-                                <span className="ml-1 text-xs text-muted-foreground">
-                                  ({athlete.pays})
-                                </span>
-                              </Label>
-                              <Input
-                                className="max-w-xs"
-                                placeholder={getPlaceholder(contexte.discipline)}
-                                value={perfValues[athlete.id] ?? ""}
-                                onChange={(e) =>
-                                  setPerfValues((prev) => ({
-                                    ...prev,
-                                    [athlete.id]: e.target.value,
-                                  }))
-                                }
-                                disabled={allPublished || submitting}
-                              />
-                            </div>
-                          ))
+                        ? contexte.athletes.map((athlete) => {
+                            const statut = statutsParticipation[athlete.id]
+                            const isForfait = statut === "FORFAIT"
+                            const isTermine = statut === "TERMINE"
+                            return (
+                              <div
+                                key={athlete.id}
+                                className={`flex flex-col sm:flex-row sm:items-center gap-2 ${isForfait ? "opacity-50" : ""}`}
+                              >
+                                <div className="sm:w-56 shrink-0 flex flex-wrap items-center gap-1">
+                                  <Label className="font-medium">
+                                    {athlete.prenom} {athlete.nom}
+                                    <span className="ml-1 text-xs text-muted-foreground">
+                                      ({athlete.pays})
+                                    </span>
+                                  </Label>
+                                  <StatutParticipationBadge statut={statut} />
+                                </div>
+                                {isForfait ? (
+                                  <span className="text-sm text-muted-foreground italic">
+                                    Forfait — auto-inséré
+                                  </span>
+                                ) : (
+                                  <Input
+                                    className="max-w-xs"
+                                    placeholder={getPlaceholder(contexte.discipline)}
+                                    value={perfValues[athlete.id] ?? ""}
+                                    onChange={(e) =>
+                                      setPerfValues((prev) => ({
+                                        ...prev,
+                                        [athlete.id]: e.target.value,
+                                      }))
+                                    }
+                                    disabled={allPublished || submitting}
+                                  />
+                                )}
+                              </div>
+                            )
+                          })
                         : contexte.equipes.map((equipe) => (
                             <div
                               key={equipe.id}
@@ -578,9 +599,12 @@ export default function CommissaireResultatsPage() {
                       .slice()
                       .sort((a, b) => (a.classement ?? 999) - (b.classement ?? 999))
                       .map((r) => (
-                        <TableRow key={r.id}>
+                        <TableRow
+                          key={r.id}
+                          className={r.statut === "FORFAIT" ? "opacity-50 bg-muted/30" : ""}
+                        >
                           <TableCell className="font-bold text-center">
-                            {r.classement ?? "—"}
+                            {r.statut === "FORFAIT" ? "—" : (r.classement ?? "—")}
                           </TableCell>
                           <TableCell className="font-medium">
                             {r.athleteId
@@ -591,18 +615,24 @@ export default function CommissaireResultatsPage() {
                             {r.athletePays ?? r.equipePays ?? "—"}
                           </TableCell>
                           <TableCell>
-                            <span className="font-mono">{r.valeurPrincipale}</span>
-                            {r.unite && (
-                              <span className="ml-1 text-xs text-muted-foreground">
-                                {r.unite}
-                              </span>
+                            {r.statut === "FORFAIT" ? (
+                              <span className="italic text-muted-foreground">FORFAIT</span>
+                            ) : (
+                              <>
+                                <span className="font-mono">{r.valeurPrincipale}</span>
+                                {r.unite && (
+                                  <span className="ml-1 text-xs text-muted-foreground">
+                                    {r.unite}
+                                  </span>
+                                )}
+                              </>
                             )}
                           </TableCell>
                           <TableCell>
-                            <MedailleBadge medaille={r.medaille} />
+                            {r.statut === "FORFAIT" ? null : <MedailleBadge medaille={r.medaille} />}
                           </TableCell>
                           <TableCell>
-                            {r.qualification ? (
+                            {r.statut !== "FORFAIT" && r.qualification ? (
                               <Badge className="bg-green-500 text-white hover:bg-green-500">Q</Badge>
                             ) : (
                               <span className="text-muted-foreground">—</span>
@@ -620,6 +650,41 @@ export default function CommissaireResultatsPage() {
           )}
         </div>
       </main>
+
+      {/* ── Modale de confirmation de forfait ── */}
+      {contexte && (
+        <Dialog open={forfaitOpen} onOpenChange={setForfaitOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirmer le forfait</DialogTitle>
+              <DialogDescription>
+                {(() => {
+                  const athlete = contexte.athletes.find((a) => a.id === forfaitAthleteId)
+                  return athlete
+                    ? `Confirmer le forfait de ${athlete.prenom} ${athlete.nom} pour ${contexte.nom} ?`
+                    : "Confirmer le forfait pour cette épreuve ?"
+                })()}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-2">
+              <Textarea
+                placeholder="Raison du forfait (optionnel)"
+                value={forfaitRaison}
+                onChange={(e) => setForfaitRaison(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setForfaitOpen(false)} disabled={forfaitLoading}>
+                Annuler
+              </Button>
+              <Button variant="destructive" onClick={handleConfirmerForfait} disabled={forfaitLoading}>
+                {forfaitLoading ? "Enregistrement..." : "Confirmer"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   )
 }

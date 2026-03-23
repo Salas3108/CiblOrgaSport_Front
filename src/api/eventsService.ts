@@ -1,25 +1,54 @@
+import { http } from './httpClient';
+import { toast } from 'sonner';
+
 const GATEWAY = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
+
+function defaultMessageForStatus(status: number): string {
+  if (status === 400) return "Données invalides."
+  if (status === 401) return "Session expirée, veuillez vous reconnecter."
+  if (status === 403) return "Accès refusé. Vérifiez vos droits."
+  if (status === 404) return "Ressource introuvable."
+  if (status === 409) return "Conflit : opération impossible."
+  if (status === 422) return "Données non traitables. Vérifiez les champs envoyés."
+  if (status === 500) return "Erreur serveur. Réessayez plus tard."
+  return "Une erreur est survenue."
+}
 
 // Helper function for API calls
 async function fetchAPI(url: string, options?: RequestInit) {
   const token = localStorage.getItem('token');
   const res = await fetch(url, {
     ...options,
-    headers: { 
+    headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers 
+      ...options?.headers
     }
   });
+
   const text = await res.text();
-  try {
-    const data = JSON.parse(text);
-    if (!res.ok) throw new Error(data?.message || text);
-    return data;
-  } catch (e) {
-    if (!res.ok) throw new Error(text || `Erreur ${res.status}`);
-    return text ? JSON.parse(text) : null;
+  let data: any = null;
+  try { data = JSON.parse(text) } catch { /* not JSON */ }
+
+  if (!res.ok) {
+    const backendMessage: string | undefined =
+      typeof data?.message === 'string' ? data.message :
+      typeof data?.error === 'string' && res.status !== 500 ? data.error :
+      undefined
+
+    if (res.status === 401) {
+      toast.error("Session expirée, veuillez vous reconnecter", { duration: 3000 })
+      setTimeout(() => { window.location.href = '/login' }, 1500)
+    } else if (res.status === 409) {
+      toast.warning(`Conflit : ${backendMessage ?? "opération impossible."}`, { duration: 5000 })
+    } else {
+      toast.error(backendMessage || defaultMessageForStatus(res.status), { duration: 5000 })
+    }
+
+    throw new Error(backendMessage || defaultMessageForStatus(res.status))
   }
+
+  return data ?? (text || null);
 }
 
 // ========== EVENTS ==========
@@ -268,7 +297,20 @@ export async function getEpreuveAssignments() {
   return fetchAPI(`${GATEWAY}/commissaire/epreuves/assignments`);
 }
 
-export default { 
+// ========== PARTICIPATION STATUS & FORFAIT ==========
+
+export async function getStatutParticipation(epreuveId: number, athleteId: number): Promise<{ epreuveId: number; athleteId: number; statut: "INSCRIT" | "EN_COURS" | "TERMINE" | "FORFAIT" }> {
+  const res = await http.get(`${GATEWAY}/commissaire/epreuves/${epreuveId}/athletes/${athleteId}/statut`);
+  return res.data;
+}
+
+export async function declarerForfait(epreuveId: number, athleteId: number, raison?: string): Promise<{ statutParticipation: string; dateForfait: string; message: string }> {
+  const body = raison ? { detailsPerformance: { raison } } : {};
+  const res = await http.post(`${GATEWAY}/epreuves/${epreuveId}/athletes/${athleteId}/forfait`, body);
+  return res.data;
+}
+
+export default {
   getEvents, 
   getEventById,
   createEvent,

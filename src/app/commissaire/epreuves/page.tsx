@@ -206,8 +206,8 @@ export default function CommissaireEpreuvesPage() {
         niveauEpreuve: form.niveauEpreuve,
         competitionId: Number(form.competitionId),
         lieuId: form.lieuId ? Number(form.lieuId) : null,
-        athleteIds: [],
-        equipeIds: [],
+        athleteIds: editEpreuve ? (editEpreuve.athleteIds ?? []) : [],
+        equipeIds: editEpreuve ? (editEpreuve.equipeIds ?? []) : [],
       }
       if (editEpreuve) {
         await eventsService.updateEpreuve(editEpreuve.id, payload)
