@@ -17,10 +17,15 @@ import {
   type VolunteerTask 
 } from "@/src/api/volunteerService"
 import { Button } from "@/components/ui/button"
+import { getLieux } from "@/src/api/eventsService"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select } from "@/components/ui/select"
+import { SelectContent } from "@/components/ui/select"
+import { SelectItem } from "@/components/ui/select"
+import { SelectTrigger } from "@/components/ui/select"
+import { SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Clock, MapPin, Calendar, RefreshCw, Trash2, User, Upload, Edit2, Plus, Users, Download, Globe, AlertTriangle, FileText } from "lucide-react"
 
@@ -32,6 +37,8 @@ interface TaskTemplate {
   requiredSkills?: string[]
   requiredLanguages?: string[]
 }
+
+export default VolunteerProgramImport;
 
 // Fonction pour convertir enum en texte lisible (ex: ACCUEIL -> "Accueil")
 const formatTaskTypeName = (taskType: string): string => {
@@ -118,19 +125,48 @@ const TASK_TEMPLATES: Record<string, TaskTemplate> = {
   },
 }
 
-const emptyTask = (): Omit<VolunteerTask, "id" | "status" | "assignedTo"> => ({
-  title: "",
-  description: "",
-  date: new Date().toISOString().slice(0, 10),
-  startTime: "09:00:00",
-  endTime: "12:00:00",
-  location: "",
-  requiredSkills: [],
-  requiredLanguages: [],
-})
+function VolunteerProgramImport() {
+  const emptyTask = (): Omit<VolunteerTask, "id" | "status" | "assignedTo"> => ({
+    title: "",
+    description: "",
+    date: new Date().toISOString().slice(0, 10),
+    startTime: "09:00:00",
+    endTime: "12:00:00",
+    locationId: 0,
+    requiredSkills: [],
+    requiredLanguages: [],
+  })
 
-export default function VolunteerProgramImport() {
   const [draft, setDraft] = useState<Omit<VolunteerTask, "id" | "status" | "assignedTo">>(emptyTask)
+  const [lieux, setLieux] = useState<{ idLieu: string; nomLieu: string }[]>([])
+  const [lieuxError, setLieuxError] = useState<string | null>(null)
+  const [lieuxLoading, setLieuxLoading] = useState(true)
+  useEffect(() => {
+    setLieuxLoading(true)
+    getLieux().then((data) => {
+      if (Array.isArray(data)) {
+        // Map backend fields to frontend expected fields
+        const mapped = data.map((lieu: any) => ({
+          idLieu: lieu.id?.toString() ?? '',
+          nomLieu: lieu.nom ?? '',
+          ville: lieu.ville,
+          adresse: lieu.adresse,
+          typeLieu: lieu.typeLieu,
+          coordonneesGPS: lieu.coordonneesGPS,
+        }))
+        setLieux(mapped)
+        setLieuxError(null)
+      } else {
+        setLieux([])
+        setLieuxError('Le backend a répondu mais le format n\'est pas un tableau.')
+      }
+    }).catch((err) => {
+      setLieux([])
+      setLieuxError('Erreur lors du chargement des lieux: ' + (err?.message || String(err)))
+    }).finally(() => {
+      setLieuxLoading(false)
+    })
+  }, [])
   const [selectedTemplate, setSelectedTemplate] = useState<string>("custom") // État pour la tâche prédéfinie sélectionnée
   const [taskType, setTaskType] = useState<"ACCUEIL" | "ORIENTATION" | "SUPPORT_LOGISTIQUE" | "SECURITE" | "PREMIERS_SECOURS" | "ACCOMPAGNEMENT_ATHLETES" | "DISTRIBUTION_EAU" | "NETTOYAGE" | "BILLETTERIE" | "INFORMATION" | "AUTRE">("ACCUEIL") // État typé pour le type de tâche
   const [volunteers, setVolunteers] = useState<VolunteerListItem[]>([])
@@ -185,8 +221,8 @@ export default function VolunteerProgramImport() {
   const addTask = async () => {
     setError(null)
     setSuccess(null)
-    if (!draft.title || !draft.date || !draft.startTime || !draft.endTime || !draft.location) {
-      setError("Veuillez remplir tous les champs obligatoires.")
+    if (!draft.title || !draft.date || !draft.startTime || !draft.endTime || !draft.locationId || draft.locationId === 0) {
+      setError("Veuillez remplir tous les champs obligatoires, y compris le lieu.")
       return
     }
     
@@ -199,13 +235,12 @@ export default function VolunteerProgramImport() {
         taskDate: draft.date, // date format: YYYY-MM-DD
         startTime: draft.startTime.includes(":") ? draft.startTime : `${draft.startTime}:00`,
         endTime: draft.endTime.includes(":") ? draft.endTime : `${draft.endTime}:00`,
-        location: draft.location,
+        locationId: Number(draft.locationId),
         taskType: taskType, // Utiliser l'état taskType stocké
         volunteersNeeded: (draft as any).volunteersNeeded || 1,
         eventId: "00000000-0000-0000-0000-000000000000", // Placeholder UUID - update if needed
         requiredLanguages: draft.requiredLanguages || [], // Ajouter les langues requises
       }
-      
       await createVolunteerTask(taskData)
       setSuccess(`Tâche "${draft.title}" créée avec succès.`)
       setDraft(emptyTask())
@@ -294,8 +329,8 @@ export default function VolunteerProgramImport() {
     setError(null)
     if (!editingTaskId || !editFormData) return
 
-    if (!editFormData.title?.trim() || !editFormData.date || !editFormData.startTime || !editFormData.endTime || !editFormData.location?.trim()) {
-      setError("Veuillez remplir tous les champs obligatoires.")
+    if (!editFormData.title?.trim() || !editFormData.date || !editFormData.startTime || !editFormData.endTime || !editFormData.locationId || editFormData.locationId === 0) {
+      setError("Veuillez remplir tous les champs obligatoires, y compris le lieu.")
       return
     }
 
@@ -311,15 +346,13 @@ export default function VolunteerProgramImport() {
         date: editFormData.date, // Use 'date' field for frontend compatibility
         startTime: editFormData.startTime,
         endTime: editFormData.endTime,
-        location: editFormData.location,
+        locationId: Number(editFormData.locationId),
         taskType: (originalTask as any)?.taskType || "ACCUEIL",
         volunteersNeeded: (originalTask as any)?.volunteersNeeded || 1,
         eventId: (originalTask as any)?.eventId || "00000000-0000-0000-0000-000000000000",
         requiredLanguages: editFormData.requiredLanguages || [],
         requiredSkills: (originalTask as any)?.requiredSkills || [],
       }
-      
-      console.log("Sending update payload:", updatedTask)
       await updateVolunteerTask(editingTaskId, updatedTask)
       setSuccess("Tâche modifiée avec succès")
       setEditingTaskId(null)
@@ -480,13 +513,30 @@ export default function VolunteerProgramImport() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="location" className="font-semibold text-slate-800">Lieu *</Label>
-                <Input
-                  id="location"
-                  value={draft.location}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, location: e.target.value }))}
-                  placeholder="Ex: Site A"
-                />
+                <Label className="font-semibold text-slate-800">Lieu *</Label>
+                {lieuxLoading ? (
+                  <div className="text-sm text-gray-500">Chargement des lieux...</div>
+                ) : (
+                  <>
+                    <Select
+                      value={draft.locationId ? String(draft.locationId) : ""}
+                      onValueChange={(value) => setDraft((prev) => ({ ...prev, locationId: Number(value) }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sélectionner un lieu" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {lieux.length === 0 && (
+                          <SelectItem value="" disabled>Aucun lieu disponible</SelectItem>
+                        )}
+                        {lieux.map((lieu) => (
+                          <SelectItem key={lieu.idLieu} value={lieu.idLieu}>{lieu.nomLieu}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {lieuxError && <div className="text-xs text-red-600 bg-red-50 p-2 rounded mt-1">{lieuxError}</div>}
+                  </>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="start-time" className="font-semibold text-slate-800">Heure de début *</Label>
@@ -657,7 +707,13 @@ export default function VolunteerProgramImport() {
                             </div>
                             <div className="flex items-center gap-1">
                               <MapPin className="h-3 w-3" />
-                              {task.location}
+                              {(() => {
+                                // Affiche le nom du lieu si possible
+                                const lieu = lieux.find(l => String(l.idLieu) === String(task.locationId));
+                                if (lieu && lieu.nomLieu) return lieu.nomLieu;
+                                if (task.location) return task.location;
+                                return `Lieu #${task.locationId}`;
+                              })()}
                             </div>
                             {task.requiredLanguages && task.requiredLanguages.length > 0 && (
                               <div className="flex items-center gap-1">
@@ -881,13 +937,21 @@ export default function VolunteerProgramImport() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-location" className="font-semibold text-slate-800">Lieu</Label>
-                    <Input
-                      id="edit-location"
-                      value={editFormData.location || ""}
-                      onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
-                      placeholder="Lieu"
-                    />
+                    <Label htmlFor="edit-locationId" className="font-semibold text-slate-800">Lieu</Label>
+                    <Select
+                      id="edit-locationId"
+                      value={editFormData.locationId ? String(editFormData.locationId) : ""}
+                      onValueChange={(value) => setEditFormData({ ...editFormData, locationId: Number(value) })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sélectionner un lieu" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {lieux.map((lieu) => (
+                          <SelectItem key={lieu.idLieu} value={lieu.idLieu}>{lieu.nomLieu}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-start-time" className="font-semibold text-slate-800">Heure de début</Label>
