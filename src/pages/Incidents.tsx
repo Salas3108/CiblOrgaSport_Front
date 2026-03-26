@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { listIncidents, createIncident } from '../api/incidentService';
+import { getIncidents, createIncident } from '../api/incidentService';
 
 export default function Incidents() {
   const [incidents, setIncidents] = useState<any[]>([]);
@@ -8,7 +8,7 @@ export default function Incidents() {
   const refresh = async () => {
     setLoading(true);
     try {
-      const data = await listIncidents();
+      const data = await getIncidents();
       setIncidents(Array.isArray(data) ? data : (data?.content ?? [])); // handle pagination
     } finally {
       setLoading(false);

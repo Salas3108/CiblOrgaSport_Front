@@ -67,10 +67,10 @@ export async function adminValidateAthlete(payload: { username: string; validate
 // adminValidateAthlete est utilisée pour valider les volontaires aussi
 
 export const login = (payload: { username: string; password: string }) =>
-  http.post(`${base}/auth/api/auth/signin`, payload).then((r: AxiosResponse<any>) => r.data);
+  http.post(`${base}/auth/login`, payload).then((r: AxiosResponse<any>) => r.data);
 
 export const register = (payload: any) =>
-  http.post(`${base}/auth/api/auth/signup`, payload).then((r: AxiosResponse<any>) => r.data);
+  http.post(`${base}/auth/register`, payload).then((r: AxiosResponse<any>) => r.data);
 
 export const hello = () => http.get(`${base}/auth/hello`).then((r: AxiosResponse<any>) => r.data);
 
@@ -92,7 +92,7 @@ export const persistToken = (token: string) => {
 };
 
 export const getMe = () =>
-  http.get(`${base}/auth/api/auth/me`).then((r: AxiosResponse<any>) => r.data);
+  http.get(`${base}/auth/me`).then((r: AxiosResponse<any>) => r.data);
 
 // Optional: helper to set Authorization header dynamically
 export const setAuthToken = (token: string) => {
