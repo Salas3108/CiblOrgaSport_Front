@@ -6,7 +6,7 @@ const base = apiBases.auth;
 // Récupérer la liste des athlètes (ADMIN)
 export async function fetchAthletes(validated?: boolean) {
   const token = localStorage.getItem('token');
-  let url = 'http://localhost:8080/auth/admin/athletes';
+  let url = `${base}/auth/admin/athletes`;
   if (validated !== undefined) url += `?validated=${validated}`;
   const res = await fetch(url, {
     headers: {
@@ -21,7 +21,7 @@ export async function fetchAthletes(validated?: boolean) {
 // Récupérer la liste des volontaires (ADMIN)
 export async function fetchVolunteers(validated?: boolean) {
   const token = localStorage.getItem('token');
-  let url = 'http://localhost:8080/auth/admin/volunteers';
+  let url = `${base}/auth/admin/volunteers`;
   if (validated !== undefined) url += `?validated=${validated}`;
   const res = await fetch(url, {
     headers: {
@@ -36,7 +36,7 @@ export async function fetchVolunteers(validated?: boolean) {
 // Valider ou rejeter un athlète (ADMIN)
 export async function adminValidateAthlete(payload: { username: string; validated: boolean }) {
   const token = localStorage.getItem('token');
-  const res = await fetch('http://localhost:8080/auth/admin/validate-athlete', {
+  const res = await fetch(`${base}/auth/admin/validate-athlete`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -67,10 +67,10 @@ export async function adminValidateAthlete(payload: { username: string; validate
 // adminValidateAthlete est utilisée pour valider les volontaires aussi
 
 export const login = (payload: { username: string; password: string }) =>
-  http.post(`${base}/auth/login`, payload).then((r: AxiosResponse<any>) => r.data);
+  http.post(`${base}/auth/api/auth/signin`, payload).then((r: AxiosResponse<any>) => r.data);
 
 export const register = (payload: any) =>
-  http.post(`${base}/auth/register`, payload).then((r: AxiosResponse<any>) => r.data);
+  http.post(`${base}/auth/api/auth/signup`, payload).then((r: AxiosResponse<any>) => r.data);
 
 export const hello = () => http.get(`${base}/auth/hello`).then((r: AxiosResponse<any>) => r.data);
 
@@ -92,7 +92,7 @@ export const persistToken = (token: string) => {
 };
 
 export const getMe = () =>
-  http.get(`${base}/auth/me`).then((r: AxiosResponse<any>) => r.data);
+  http.get(`${base}/auth/api/auth/me`).then((r: AxiosResponse<any>) => r.data);
 
 // Optional: helper to set Authorization header dynamically
 export const setAuthToken = (token: string) => {
@@ -122,7 +122,7 @@ export const adminValidateVolunteer = async (data: {
   accreditation?: string;
   affectation?: string;
 }) => {
-  const response = await fetch('http://localhost:8080/auth/admin/validate-volunteer', {
+  const response = await fetch(`${base}/auth/admin/validate-volunteer`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
