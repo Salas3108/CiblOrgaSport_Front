@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   Calendar, Trophy, Shield, Users, ClipboardCheck,
-  Eye, Settings, BarChart3, Map, Navigation, Home,
+  Eye, Settings, BarChart3, Map, Navigation, Home, User
 } from "lucide-react"
 import { useAuth } from "@/components/auth/auth-provider"
 
@@ -36,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Carte athlètes",    href: "/commissaire/athletes/carte",  icon: Map,            roles: ["commissaire"] },
 
   // ── Athlète ──
+  { label: "Compléter profil",  href: "/athlete",                     icon: User,           roles: ["athlete"] },
   { label: "Mes épreuves",      href: "/athlete/mes-epreuves",        icon: Calendar,       roles: ["athlete"] },
   { label: "Mon équipe",        href: "/athlete/mon-equipe",          icon: Users,          roles: ["athlete"] },
 
