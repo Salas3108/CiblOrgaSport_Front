@@ -1,5 +1,5 @@
 // src/api/geoService.ts
-// Centralise tous les appels REST vers le geolocation-service (http://localhost:8091)
+// Centralise tous les appels REST vers le geolocation-service (http://137.74.133.131)
 // Toutes les requêtes transitent via le proxy Next.js /api/geo/* → localhost:8091/api/geo/*
 
 import axios, { AxiosError } from 'axios';
@@ -13,7 +13,7 @@ import type {
 // ---------------------------------------------------------------------------
 // Instance Axios dédiée au geolocation-service
 // ---------------------------------------------------------------------------
-const GEO_BASE = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'}/api/geo`;
+const GEO_BASE = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://137.74.133.131'}/api/geo`;
 const geoHttp = axios.create({ baseURL: GEO_BASE });
 
 geoHttp.interceptors.request.use((config) => {

@@ -80,7 +80,7 @@ interface Equipe {
   categorie?: string;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8087";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://137.74.133.131";
 
 const getAuthHeaders = () => {
   if (typeof window === "undefined") return { "Content-Type": "application/json" } as Record<string, string>;

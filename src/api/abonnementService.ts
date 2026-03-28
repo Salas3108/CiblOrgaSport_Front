@@ -1,7 +1,7 @@
 import { http, apiBases } from './httpClient';
 import type { AxiosResponse } from 'axios';
 
-const base = apiBases.abonnement || 'http://localhost:8080';
+const base = apiBases.abonnement || 'http://137.74.133.131';
 
 export const getUserSubscriptions = (userId: string | number) =>
   http.get(`${base}/api/abonnements/user/${userId}`).then((r: AxiosResponse<any>) => r.data);

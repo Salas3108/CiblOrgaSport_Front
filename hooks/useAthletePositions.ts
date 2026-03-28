@@ -10,7 +10,7 @@ import SockJS from 'sockjs-client';
 import { getTokenFromStorage } from '@/lib/jwt';
 import type { WebSocketPositionMessage } from '@/types/geo';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8091';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://137.74.133.131';
 const GEO_WS_URL = `${API_BASE}/ws/geo`;
 
 interface UseAthletePositionsResult {

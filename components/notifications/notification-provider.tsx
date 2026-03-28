@@ -64,7 +64,7 @@ const defaultPreferences: NotificationPreferences = {
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined)
-const NOTIFICATIONS_WS_URL = process.env.NEXT_PUBLIC_NOTIFICATIONS_WS_URL || "http://localhost:8089/ws"
+const NOTIFICATIONS_WS_URL = process.env.NEXT_PUBLIC_NOTIFICATIONS_WS_URL || "http://137.74.133.131/ws"
 const MAX_NOTIFICATIONS = 200
 
 const notificationTypeToPreferenceKey: Record<Notification["type"], keyof NotificationPreferences> = {

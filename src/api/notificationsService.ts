@@ -1,7 +1,7 @@
 import type { AxiosResponse } from "axios"
 import { apiBases, http } from "./httpClient"
 
-const base = apiBases.notifications || "http://localhost:8080"
+const base = apiBases.notifications || "http://137.74.133.131"
 
 export interface BackendNotificationDTO {
   id: number
