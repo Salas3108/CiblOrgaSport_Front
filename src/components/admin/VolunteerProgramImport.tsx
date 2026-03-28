@@ -525,7 +525,7 @@ function VolunteerProgramImport() {
                       </SelectTrigger>
                       <SelectContent>
                         {lieux.length === 0 && (
-                          <SelectItem value="" disabled>Aucun lieu disponible</SelectItem>
+                          <SelectItem value="__none__" disabled>Aucun lieu disponible</SelectItem>
                         )}
                         {lieux.map((lieu) => (
                           <SelectItem key={lieu.idLieu} value={lieu.idLieu}>{lieu.nomLieu}</SelectItem>
