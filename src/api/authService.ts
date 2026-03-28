@@ -44,7 +44,7 @@ export async function deleteMyAccount() {
 // Récupérer la liste des athlètes (ADMIN)
 export async function fetchAthletes(validated?: boolean) {
   const token = localStorage.getItem('token');
-  let url = 'http://localhost:8080/auth/admin/athletes';
+  let url = `${base}/auth/admin/athletes`;
   if (validated !== undefined) url += `?validated=${validated}`;
   const res = await fetch(url, {
     headers: {
@@ -59,7 +59,7 @@ export async function fetchAthletes(validated?: boolean) {
 // Récupérer la liste des volontaires (ADMIN)
 export async function fetchVolunteers(validated?: boolean) {
   const token = localStorage.getItem('token');
-  let url = 'http://localhost:8080/auth/admin/volunteers';
+  let url = `${base}/auth/admin/volunteers`;
   if (validated !== undefined) url += `?validated=${validated}`;
   const res = await fetch(url, {
     headers: {
@@ -74,7 +74,7 @@ export async function fetchVolunteers(validated?: boolean) {
 // Valider ou rejeter un athlète (ADMIN)
 export async function adminValidateAthlete(payload: { username: string; validated: boolean }) {
   const token = localStorage.getItem('token');
-  const res = await fetch('http://localhost:8080/auth/admin/validate-athlete', {
+  const res = await fetch(`${base}/auth/admin/validate-athlete`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -209,7 +209,7 @@ export const adminValidateVolunteer = async (data: {
   accreditation?: string;
   affectation?: string;
 }) => {
-  const response = await fetch('http://localhost:8080/auth/admin/validate-volunteer', {
+  const response = await fetch(`${base}/auth/admin/validate-volunteer`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

@@ -160,20 +160,22 @@ export function LoginForm() {
         throw new Error(errorMessage)
       }
 
-      const { token, user, type } = await res.json()
+      const data = await res.json()
+      const { token, type, id, username: resUsername, role: resRole } = data
       // persist token early so downstream normalization/decoding can use it
       localStorage.setItem("token", token)
 
-      // attempt to fetch full user profile (to get numeric id) using username
-      let fullUser = user
+      // build user object from flat backend response
+      let fullUser: any = { username: resUsername, role: resRole, id }
       try {
-        if (user?.username) {
-          const fetched = await authRepo.getUserByUsername(user.username)
+        if (resUsername) {
+          const fetched = await authRepo.getUserByUsername(resUsername)
           if (fetched) fullUser = { ...fullUser, ...fetched }
         }
       } catch (e) {
         // ignore fetch errors; we'll still persist what we have
       }
+      const user = fullUser
       if (process.env.NODE_ENV === "development") {
         // eslint-disable-next-line no-console
         console.log("[LoginForm] Response body:", {

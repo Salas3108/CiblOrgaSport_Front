@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api"
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://137.74.133.131"
 
 function toQuery(params?: Record<string, unknown>) {
   if (!params) return ""
@@ -12,8 +12,13 @@ function toQuery(params?: Record<string, unknown>) {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
     ...init,
   })
   if (!res.ok) {

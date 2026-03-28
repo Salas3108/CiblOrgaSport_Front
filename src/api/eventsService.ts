@@ -1,35 +1,58 @@
+import { http } from './httpClient';
+import { toast } from 'sonner';
+
 const GATEWAY = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
 
 type ApiError = Error & { status?: number };
+
+function defaultMessageForStatus(status: number): string {
+  if (status === 400) return "Données invalides."
+  if (status === 401) return "Session expirée, veuillez vous reconnecter."
+  if (status === 403) return "Accès refusé. Vérifiez vos droits."
+  if (status === 404) return "Ressource introuvable."
+  if (status === 409) return "Conflit : opération impossible."
+  if (status === 422) return "Données non traitables. Vérifiez les champs envoyés."
+  if (status === 500) return "Erreur serveur. Réessayez plus tard."
+  return "Une erreur est survenue."
+}
 
 // Helper function for API calls
 async function fetchAPI(url: string, options?: RequestInit) {
   const token = localStorage.getItem('token');
   const res = await fetch(url, {
     ...options,
-    headers: { 
+    headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers 
+      ...options?.headers
     }
   });
+
   const text = await res.text();
-  try {
-    const data = JSON.parse(text);
-    if (!res.ok) {
-      const error = new Error(data?.message || text || `Erreur ${res.status}`) as ApiError;
-      error.status = res.status;
-      throw error;
+  let data: any = null;
+  try { data = JSON.parse(text) } catch { /* not JSON */ }
+
+  if (!res.ok) {
+    const backendMessage: string | undefined =
+      typeof data?.message === 'string' ? data.message :
+      typeof data?.error === 'string' && res.status !== 500 ? data.error :
+      undefined
+
+    if (res.status === 401) {
+      toast.error("Session expirée, veuillez vous reconnecter", { duration: 3000 })
+      setTimeout(() => { window.location.href = '/login' }, 1500)
+    } else if (res.status === 409) {
+      toast.warning(`Conflit : ${backendMessage ?? "opération impossible."}`, { duration: 5000 })
+    } else {
+      toast.error(backendMessage || defaultMessageForStatus(res.status), { duration: 5000 })
     }
-    return data;
-  } catch (e) {
-    if (!res.ok) {
-      const error = new Error(text || `Erreur ${res.status}`) as ApiError;
-      error.status = res.status;
-      throw error;
-    }
-    return text ? JSON.parse(text) : null;
+
+    const error = new Error(backendMessage || defaultMessageForStatus(res.status)) as ApiError;
+    error.status = res.status;
+    throw error;
   }
+
+  return data ?? (text || null);
 }
 
 const isNotFoundError = (error: unknown) => {
@@ -231,7 +254,118 @@ export async function adminAddEpreuveToCompetition(competitionId: number, epreuv
   });
 }
 
-export default { 
+// ========== PARTICIPANT ASSIGNMENT ==========
+export async function assignAthletesBulk(epreuveId: number, athleteIds: number[]) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/athletes/bulk`, {
+    method: 'POST',
+    body: JSON.stringify({ athleteIds })
+  });
+}
+
+export async function assignAthleteToEpreuve(epreuveId: number, athleteId: number) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/athletes`, {
+    method: 'POST',
+    body: JSON.stringify({ athleteId })
+  });
+}
+
+export async function assignEquipesToEpreuve(epreuveId: number, equipeIds: number[]) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/equipes`, {
+    method: 'POST',
+    body: JSON.stringify({ equipeIds })
+  });
+}
+
+export async function getEpreuveAthletes(epreuveId: number) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/athletes`);
+}
+
+export async function getEpreuveEquipes(epreuveId: number) {
+  return fetchAPI(`${GATEWAY}/epreuves/${epreuveId}/equipes`);
+}
+
+export async function getAthleteEpreuves(athleteId: number) {
+  return fetchAPI(`${GATEWAY}/epreuves/athletes/${athleteId}`);
+}
+
+// ========== PARTICIPANTS-SERVICE ==========
+export async function getAthletesValides() {
+  return fetchAPI(`${GATEWAY}/commissaire/athletes/valides`);
+}
+
+export async function getAllAthletes() {
+  return fetchAPI(`${GATEWAY}/commissaire/athletes`);
+}
+
+export async function getAthleteInfo(id: number) {
+  return fetchAPI(`${GATEWAY}/commissaire/athletes/${id}/info`);
+}
+
+export async function validerAthlete(id: number, valide: boolean, motifRefus: string | null = null) {
+  return fetchAPI(`${GATEWAY}/commissaire/athletes/${id}/validation`, {
+    method: 'POST',
+    body: JSON.stringify({ valide, message: valide ? 'Dossier validé' : motifRefus, motifRefus })
+  });
+}
+
+export async function envoyerMessage(id: number, contenu: string) {
+  return fetchAPI(`${GATEWAY}/commissaire/athletes/${id}/message`, {
+    method: 'POST',
+    body: JSON.stringify({ contenu })
+  });
+}
+
+export async function getAllEquipes() {
+  return fetchAPI(`${GATEWAY}/commissaire/equipes`);
+}
+
+export async function getEquipeById(id: number) {
+  return fetchAPI(`${GATEWAY}/commissaire/equipes/${id}`);
+}
+
+export async function createEquipe(data: { nom: string; pays: string }) {
+  return fetchAPI(`${GATEWAY}/commissaire/equipes`, {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function updateEquipe(id: number, data: { nom: string; pays: string }) {
+  return fetchAPI(`${GATEWAY}/commissaire/equipes/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  });
+}
+
+export async function deleteEquipe(id: number) {
+  return fetchAPI(`${GATEWAY}/commissaire/equipes/${id}`, { method: 'DELETE' });
+}
+
+export async function assignAthletesToEquipe(equipeId: number, athleteIds: number[]) {
+  return fetchAPI(`${GATEWAY}/commissaire/equipes/${equipeId}/athletes`, {
+    method: 'POST',
+    body: JSON.stringify({ athleteIds })
+  });
+}
+
+export async function getEpreuveAssignments() {
+  return fetchAPI(`${GATEWAY}/commissaire/epreuves/assignments`);
+}
+
+// ========== PARTICIPATION STATUS & FORFAIT ==========
+
+export async function getStatutParticipation(epreuveId: number, athleteId: number): Promise<{ epreuveId: number; athleteId: number; statut: "INSCRIT" | "EN_COURS" | "TERMINE" | "FORFAIT" }> {
+  const res = await http.get(`${GATEWAY}/commissaire/epreuves/${epreuveId}/athletes/${athleteId}/statut`);
+  return res.data;
+}
+
+export async function declarerForfait(epreuveId: number, athleteId: number, raison?: string): Promise<{ statutParticipation: string; dateForfait: string; message: string }> {
+  const body = raison ? { detailsPerformance: { raison } } : {};
+  const res = await http.post(`${GATEWAY}/epreuves/${epreuveId}/athletes/${athleteId}/forfait`, body);
+  return res.data;
+}
+
+export default {
   getEvents, 
   getEventById,
   createEvent,
