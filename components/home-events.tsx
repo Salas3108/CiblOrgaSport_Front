@@ -1,235 +1,211 @@
-// components/home-events.tsx - VERSION AVEC ID UTILISATEUR STABLE
 "use client"
 import React, { useEffect, useState } from 'react'
+import { getMe } from '@/src/api/authService'
+import { getUserSubscriptions, subscribeToCompetition, unsubscribeFromCompetition } from '@/src/api/abonnementService'
+import { listCompetitions } from '@/src/api/eventService'
+
+type CompetitionItem = {
+  id: number
+  name?: string
+  dateDebut?: string
+  dateFin?: string
+  type?: string
+  description?: string
+  paysHote?: string
+  [key: string]: any
+}
+
+const toNumber = (value: unknown): number | null => {
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+const parseStoredUser = () => {
+  if (typeof window === 'undefined') return null
+  const raw = localStorage.getItem('user')
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+const formatDateFr = (value?: string) => {
+  if (!value) return 'Non renseignee'
+
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+
+  return parsed.toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
+const formatDateRange = (dateDebut?: string, dateFin?: string) => {
+  if (dateDebut && dateFin) {
+    return `${formatDateFr(dateDebut)} - ${formatDateFr(dateFin)}`
+  }
+  if (dateDebut) {
+    return `A partir du ${formatDateFr(dateDebut)}`
+  }
+  if (dateFin) {
+    return `Jusqu'au ${formatDateFr(dateFin)}`
+  }
+  return 'Non renseignee'
+}
 
 export default function HomeEvents() {
-  const [competitions, setCompetitions] = useState<any[]>([])
-  const [abonnements, setAbonnements] = useState<Set<string>>(new Set())
+  const [competitions, setCompetitions] = useState<CompetitionItem[]>([])
+  const [abonnements, setAbonnements] = useState<Set<number>>(new Set())
   const [loading, setLoading] = useState(true)
   const [userId, setUserId] = useState<number | null>(null)
-  const [userName, setUserName] = useState<string>('')
+  const [userName, setUserName] = useState<string>('Utilisateur')
 
-  // Fonction pour générer un ID STABLE basé sur le nom d'utilisateur/email
-  const getStableUserId = (): number => {
-    try {
-      // 1. Essayer de récupérer depuis localStorage 'user'
-      const userStr = localStorage.getItem('user')
-      if (userStr) {
-        const user = JSON.parse(userStr)
-        
-        // Si l'utilisateur a un ID numérique, l'utiliser
-        if (user.id && typeof user.id === 'number') {
-          return user.id
-        }
-        
-        // Si l'ID est une chaîne numérique
-        if (user.id && typeof user.id === 'string') {
-          const numericId = parseInt(user.id, 10)
-          if (!isNaN(numericId)) {
-            return numericId
-          }
-        }
-        
-        // Générer un ID STABLE à partir du nom d'utilisateur/email
-        const identifier = user.username || user.email || user.name || 'default'
-        let hash = 0
-        for (let i = 0; i < identifier.length; i++) {
-          const char = identifier.charCodeAt(i)
-          hash = ((hash << 5) - hash) + char
-          hash = hash & hash // Convertir en 32-bit integer
-        }
-        return Math.abs(hash) % 10000 + 1000 // ID stable entre 1000 et 10999
-      }
-      
-      // 2. Essayer depuis le token JWT
-      const token = localStorage.getItem('token')
-      if (token) {
-        try {
-          const payload = JSON.parse(atob(token.split('.')[1]))
-          if (payload.sub || payload.email || payload.username) {
-            const identifier = payload.sub || payload.email || payload.username
-            let hash = 0
-            for (let i = 0; i < identifier.length; i++) {
-              hash = ((hash << 5) - hash) + identifier.charCodeAt(i)
-              hash = hash & hash
-            }
-            return Math.abs(hash) % 10000 + 1000
-          }
-        } catch (e) {
-          console.log('Token non JWT')
-        }
-      }
-      
-      // 3. Si pas d'utilisateur, retourner un ID par défaut
-      return 1
-      
-    } catch (error) {
-      console.error('Erreur:', error)
-      return 1
+  const resolveConnectedUser = async (): Promise<{ id: number | null; name: string }> => {
+    const storedUser = parseStoredUser()
+    const storedId = toNumber(storedUser?.id)
+    const storedName = storedUser?.name || storedUser?.username || storedUser?.email || 'Utilisateur'
+
+    if (storedId !== null) {
+      return { id: storedId, name: storedName }
     }
-  }
 
-  // Fonction pour récupérer le nom d'utilisateur
-  const getUserName = (): string => {
     try {
-      const userStr = localStorage.getItem('user')
-      if (userStr) {
-        const user = JSON.parse(userStr)
-        return user.name || user.username || user.email || 'Utilisateur'
+      const me = await getMe()
+      const meId = toNumber((me as any)?.id)
+      const meName = (me as any)?.username || (me as any)?.name || (me as any)?.email || storedName
+
+      if (meId !== null && typeof window !== 'undefined') {
+        localStorage.setItem('user', JSON.stringify({ ...(storedUser || {}), ...(me || {}), id: meId }))
       }
-      return 'Utilisateur'
+
+      return { id: meId, name: meName || 'Utilisateur' }
     } catch {
-      return 'Utilisateur'
+      return { id: null, name: storedName }
     }
   }
 
-  // Convertir ID compétition en UUID
-  const convertToUUID = (id: string | number): string => {
-    const num = typeof id === 'string' ? parseInt(id, 10) : id
-    if (isNaN(num)) return '00000000-0000-0000-0000-000000000000'
-    
-    const hex = num.toString(16).padStart(12, '0')
-    return `00000000-0000-0000-0000-${hex}`
-  }
-
-  // Initialisation
   useEffect(() => {
-    const initUser = () => {
-      const id = getStableUserId()
-      const name = getUserName()
-      setUserId(id)
-      setUserName(name)
-      console.log(`Utilisateur initialisé: ${name} (ID: ${id})`)
+    let isMounted = true
+
+    const initUser = async () => {
+      const connectedUser = await resolveConnectedUser()
+      if (!isMounted) return
+      setUserId(connectedUser.id)
+      setUserName(connectedUser.name)
     }
-    
+
     initUser()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
-  // Charger les compétitions
   useEffect(() => {
     const loadCompetitions = async () => {
-      if (!userId) return
-      
       try {
         setLoading(true)
-        const token = localStorage.getItem('token')
-        
-        const response = await fetch('http://localhost:8080/competitions', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-        
-        if (response.ok) {
-          const data = await response.json()
-          const transformed = Array.isArray(data) ? data.map((comp: any) => ({
-            ...comp,
-            originalId: comp.id,
-            uuidId: convertToUUID(comp.id)
-          })) : []
-          
-          setCompetitions(transformed)
-        }
+        const data = await listCompetitions()
+        const normalized = Array.isArray(data)
+          ? data
+              .map((comp: any) => {
+                const compId = toNumber(comp?.id)
+                if (compId === null) return null
+                return {
+                  ...comp,
+                  id: compId,
+                } as CompetitionItem
+              })
+              .filter((comp: CompetitionItem | null): comp is CompetitionItem => comp !== null)
+          : []
+
+        setCompetitions(normalized)
       } catch (error) {
-        console.error('Erreur:', error)
+        console.error('Erreur chargement compétitions:', error)
+        setCompetitions([])
       } finally {
         setLoading(false)
       }
     }
-    
-    loadCompetitions()
-  }, [userId])
 
-  // Charger les abonnements
-  const loadAbonnements = async () => {
-    if (!userId) return
-    
+    loadCompetitions()
+  }, [])
+
+  const loadAbonnements = async (currentUserId: number) => {
     try {
-      console.log(`Chargement abonnements pour user ID: ${userId} (${userName})`)
-      const response = await fetch(`http://localhost:8085/api/abonnements/user/${userId}`)
-      
-      if (response.ok) {
-        const data = await response.json()
-        if (Array.isArray(data)) {
-          const competitionIds = data.map((ab: any) => ab.competitionId)
-          setAbonnements(new Set(competitionIds))
-          console.log(`${userName} a ${competitionIds.length} abonnement(s)`)
-        }
-      } else if (response.status === 404) {
-        setAbonnements(new Set())
-        console.log(`${userName} n'a pas d'abonnements`)
-      }
+      const data = await getUserSubscriptions(currentUserId)
+      const competitionIds = Array.isArray(data)
+        ? data
+            .map((ab: any) => toNumber(ab?.competitionId))
+            .filter((id: number | null): id is number => id !== null)
+        : []
+      setAbonnements(new Set(competitionIds))
     } catch (error) {
-      console.error('Erreur:', error)
+      console.warn('Impossible de charger les abonnements:', error)
+      setAbonnements(new Set())
     }
   }
 
-  // S'abonner
-  const handleSAbonner = async (competition: any, competitionName: string) => {
-    if (!userId) {
+  useEffect(() => {
+    if (userId === null) {
+      setAbonnements(new Set())
+      return
+    }
+    loadAbonnements(userId)
+  }, [userId])
+
+  const handleSAbonner = async (competition: CompetitionItem, competitionName: string) => {
+    if (userId === null) {
       alert('Veuillez vous connecter')
       return
     }
-    
+
+    const competitionId = toNumber(competition?.id)
+    if (competitionId === null) {
+      alert('Compétition invalide')
+      return
+    }
+
     try {
-      const response = await fetch(
-        `http://localhost:8085/api/abonnements/subscribe?userId=${userId}&competitionId=${competition.uuidId}`,
-        { 
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        }
-      )
-      
-      if (response.ok) {
-        alert(`✅ ${userName}, abonné à "${competitionName}"`)
-        loadAbonnements()
-      } else {
-        const error = await response.json().catch(() => ({ message: 'Erreur inconnue' }))
-        alert(`❌ ${error.message || error.error || 'Échec de l\'abonnement'}`)
-      }
+      await subscribeToCompetition(userId, competitionId)
+      alert(`✅ ${userName}, abonné à "${competitionName}"`)
+      await loadAbonnements(userId)
     } catch (error: any) {
-      alert(`❌ Erreur de connexion: ${error.message}`)
+      const message = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Échec de l\'abonnement'
+      alert(`❌ ${message}`)
     }
   }
 
-  // Se désabonner
-  const handleSeDesabonner = async (competition: any, competitionName: string) => {
-    if (!userId) return
-    
+  const handleSeDesabonner = async (competition: CompetitionItem, competitionName: string) => {
+    if (userId === null) return
+
+    const competitionId = toNumber(competition?.id)
+    if (competitionId === null) {
+      alert('Compétition invalide')
+      return
+    }
+
     if (!confirm(`Voulez-vous vraiment vous désabonner de "${competitionName}" ?`)) {
       return
     }
-    
+
     try {
-      const response = await fetch(
-        `http://localhost:8085/api/abonnements/unsubscribe?userId=${userId}&competitionId=${competition.uuidId}`,
-        { method: 'DELETE' }
-      )
-      
-      if (response.ok) {
-        alert(`✅ ${userName}, désabonné de "${competitionName}"`)
-        loadAbonnements()
-      } else {
-        const error = await response.json().catch(() => ({ message: 'Erreur inconnue' }))
-        alert(`❌ ${error.message || error.error || 'Erreur lors du désabonnement'}`)
-      }
+      await unsubscribeFromCompetition(userId, competitionId)
+      alert(`✅ ${userName}, désabonné de "${competitionName}"`)
+      await loadAbonnements(userId)
     } catch (error: any) {
-      alert(`❌ Erreur de connexion`)
+      const message = error?.response?.data?.message || error?.response?.data?.error || error?.message || 'Erreur lors du désabonnement'
+      alert(`❌ ${message}`)
     }
   }
 
-  // Vérifier si abonné
-  const estAbonne = (competition: any) => {
-    return abonnements.has(competition.uuidId)
+  const estAbonne = (competition: CompetitionItem) => {
+    return abonnements.has(Number(competition.id))
   }
-
-  // Charger les abonnements
-  useEffect(() => {
-    if (userId) {
-      loadAbonnements()
-    }
-  }, [userId])
 
   return (
     <div className="p-6">
@@ -241,7 +217,7 @@ export default function HomeEvents() {
           <div className="text-sm text-gray-700">
             <span className="font-medium">{userName}</span>
             <span className="mx-2">•</span>
-            <span>ID: <span className="font-mono">{userId}</span></span>
+            <span>ID: <span className="font-mono">{userId ?? '-'}</span></span>
           </div>
         </div>
         
@@ -274,8 +250,30 @@ export default function HomeEvents() {
             const abonne = estAbonne(competition)
             
             return (
-              <div key={competition.originalId} className="border p-4 rounded hover:shadow-md transition-shadow">
-                <h3 className="font-bold text-lg mb-2">{competition.name}</h3>
+              <div key={competition.id} className="border p-4 rounded hover:shadow-md transition-shadow">
+                <h3 className="font-bold text-lg mb-2">
+                  {competition.name || `Competition #${competition.id}`}
+                </h3>
+
+                <div className="grid gap-2 text-sm text-gray-700 mb-3">
+                  <div className="flex flex-wrap gap-x-6 gap-y-2">
+                    <span>
+                      <span className="font-medium">ID: </span>
+                      <span className="font-mono">{competition.id}</span>
+                    </span>
+                    <span>
+                      <span className="font-medium">Periode: </span>
+                      {formatDateRange(competition.dateDebut, competition.dateFin)}
+                    </span>
+                  </div>
+
+                  {competition.paysHote && (
+                    <div>
+                      <span className="font-medium">Pays hote: </span>
+                      {competition.paysHote}
+                    </div>
+                  )}
+                </div>
                 
                 {/* Type de compétition */}
                 {competition.type && (
@@ -288,9 +286,10 @@ export default function HomeEvents() {
                 )}
                 
                 {/* Description */}
-                {competition.description && (
-                  <p className="text-gray-600 text-sm mb-3">{competition.description}</p>
-                )}
+                <div className="text-gray-600 text-sm mb-3 bg-gray-50 rounded-md p-3">
+                  <span className="font-medium text-gray-700">Description: </span>
+                  {competition.description || 'Aucune description fournie.'}
+                </div>
                 
                 <div className="flex items-center justify-between">
                   <div>
@@ -302,9 +301,9 @@ export default function HomeEvents() {
                   <button
                     onClick={() => {
                       if (abonne) {
-                        handleSeDesabonner(competition, competition.name)
+                        handleSeDesabonner(competition, competition.name || 'cette compétition')
                       } else {
-                        handleSAbonner(competition, competition.name)
+                        handleSAbonner(competition, competition.name || 'cette compétition')
                       }
                     }}
                     className={`px-4 py-2 rounded ${abonne ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'} text-white transition-colors`}

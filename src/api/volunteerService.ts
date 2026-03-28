@@ -38,7 +38,8 @@ export type VolunteerTask = {
   date: string
   startTime: string
   endTime: string
-  location: string
+  locationId: number
+  location?: string // nom du lieu pour affichage (optionnel, fourni par le backend)
   taskType?: VolunteerTaskDTO["taskType"]
   volunteersNeeded?: number
   eventId?: string
@@ -56,7 +57,7 @@ export type VolunteerTaskDTO = {
   taskDate: string // YYYY-MM-DD
   startTime: string // HH:mm:ss
   endTime: string // HH:mm:ss
-  location: string
+  locationId: number
   taskType: "ACCUEIL" | "ORIENTATION" | "SUPPORT_LOGISTIQUE" | "SECURITE" | "PREMIERS_SECOURS" | "ACCOMPAGNEMENT_ATHLETES" | "DISTRIBUTION_EAU" | "NETTOYAGE" | "BILLETTERIE" | "INFORMATION" | "AUTRE"
   volunteersNeeded: number
   requiredLanguages?: string[]
@@ -89,6 +90,7 @@ type BackendVolunteerTask = {
   taskDate?: string
   startTime?: string
   endTime?: string
+  locationId?: number
   location?: string
   taskType?: VolunteerTaskDTO["taskType"]
   volunteersNeeded?: number
@@ -167,7 +169,8 @@ function normalizeTask(task: BackendVolunteerTask): VolunteerTask {
     date: task.date ?? task.taskDate ?? "",
     startTime: task.startTime ?? "",
     endTime: task.endTime ?? "",
-    location: task.location ?? "",
+    locationId: task.locationId ?? 0,
+    location: task.location ?? undefined,
     taskType: task.taskType,
     volunteersNeeded: task.volunteersNeeded,
     eventId: task.eventId,
@@ -309,10 +312,12 @@ export async function getVolunteer(id: number) {
 // ===== ADMIN VOLUNTEER TASKS ENDPOINTS =====
 
 export async function createVolunteerTask(task: VolunteerTaskDTO) {
+  // On s'assure que locationId est bien un number
+  const payload = { ...task, locationId: Number(task.locationId) }
   const response = await fetch(`${VOLUNTEER_ADMIN_API}/tasks`, {
     method: "POST",
     headers: getAuthHeaders(),
-    body: JSON.stringify(task),
+    body: JSON.stringify(payload),
   })
 
   if (!response.ok) {
@@ -328,10 +333,12 @@ export async function importVolunteerTasks(tasks: any[], eventId?: number) {
   const url = new URL(`${VOLUNTEER_ADMIN_API}/tasks/import`, window.location.origin)
   if (eventId) url.searchParams.set("eventId", String(eventId))
 
+  // On s'assure que chaque tâche a un locationId numérique
+  const payload = tasks.map(t => ({ ...t, locationId: Number(t.locationId) }))
   const response = await fetch(url.toString(), {
     method: "POST",
     headers: getAuthHeaders(),
-    body: JSON.stringify(tasks),
+    body: JSON.stringify(payload),
   })
 
   if (!response.ok) {
@@ -384,7 +391,7 @@ export async function updateVolunteerTask(id: string, task: Partial<VolunteerTas
     taskDate: task.date || (task as any).taskDate, // Convert date -> taskDate for backend
     startTime: (task.startTime || "").includes(":") ? task.startTime : `${task.startTime}:00`,
     endTime: (task.endTime || "").includes(":") ? task.endTime : `${task.endTime}:00`,
-    location: task.location,
+    locationId: Number((task as any).locationId),
     taskType: (task as any).taskType || "ACCUEIL",
     volunteersNeeded: (task as any).volunteersNeeded || 1,
     eventId: (task as any).eventId || "00000000-0000-0000-0000-000000000000",

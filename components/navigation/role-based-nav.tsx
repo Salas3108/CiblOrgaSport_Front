@@ -1,20 +1,12 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
-import { 
-  Calendar, 
-  Trophy, 
-  MapPin, 
-  Shield, 
-  Users, 
-  ClipboardCheck, 
-  Heart, 
-  Eye,
-  Settings,
-  BarChart3
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import {
+  Calendar, Trophy, Shield, Users, ClipboardCheck,
+  Eye, Settings, BarChart3, Map, Navigation, Home, User
 } from "lucide-react"
 import { useAuth } from "@/components/auth/auth-provider"
-import Link from "next/link"
 
 interface NavItem {
   label: string
@@ -23,190 +15,118 @@ interface NavItem {
   roles: string[]
 }
 
-const navigationItems: NavItem[] = [
-  {
-    label: "Dashboard",
-    href: "/",
-    icon: BarChart3,
-    roles: ["official", "athlete", "spectator", "volunteer"]
-  },
-  {
-    label: "Events",
-    href: "/AdminEvents",
-    icon: Calendar,
-    roles: ["official", "athlete", "spectator", "volunteer"]
-  },
-  {
-    label: "Results",
-    href: "/results",
-    icon: Trophy,
-    roles: ["admin", "official", "athlete", "spectator", "volunteer"]
-  },
-  {
-    label: "Venues",
-    href: "/venues",
-    icon: MapPin,
-    roles: ["admin", "official", "spectator", "volunteer"]
-  },
-  {
-    label: "Security",
-    href: "/security",
-    icon: Shield,
-    roles: ["admin", "official", "volunteer"]
-  },
-  {
-    label: "Administration",
-    href: "/admin",
-    icon: Settings,
-    roles: ["admin"]
-  },
-  {
-    label: "Gestion événements",
-    href: "/admin/events",
-    icon: Calendar,
-    roles: ["admin", "commissaire"]
-  },
-  {
-    label: "Athletes",
-    href: "/athlete",
-    icon: Users,
-    roles: ["athlete"]
-  },
-  {
-    label: "Mes épreuves",
-    href: "/athlete/mes-epreuves",
-    icon: Calendar,
-    roles: ["athlete"]
-  },
-  {
-    label: "Mon équipe",
-    href: "/athlete/mon-equipe",
-    icon: Users,
-    roles: ["athlete"]
-  },
-  {
-    label: "Officials",
-    href: "/official",
-    icon: ClipboardCheck,
-    roles: ["official"]
-  },
-  {
-    label: "Validation athlètes",
-    href: "/commissaire",
-    icon: ClipboardCheck,
-    roles: ["commissaire"]
-  },
-  {
-    label: "Assignation équipes",
-    href: "/commissaire/equipes",
-    icon: Users,
-    roles: ["commissaire"]
-  },
-  {
-    label: "Assignation épreuves",
-    href: "/commissaire/epreuves",
-    icon: Trophy,
-    roles: ["commissaire"]
-  },
-  {
-    label: "Saisie des résultats",
-    href: "/commissaire/resultats",
-    icon: BarChart3,
-    roles: ["commissaire"]
-  },
-  {
-    label: "Mon programme",
-    href: "/volunteer/program",
-    icon: Calendar,
-    roles: ["volunteer"]
-  },
-  {
-    label: "Mon profil",
-    href: "/volunteer/profile",
-    icon: Users,
-    roles: ["volunteer"]
-  },
-  {
-    label: "Spectators",
-    href: "/spectator",
-    icon: Eye,
-    roles: ["spectator"]
-  }
+const NAV_ITEMS: NavItem[] = [
+  // ── Commun ──
+  { label: "Accueil",           href: "/",                            icon: Home,           roles: ["admin", "official", "athlete", "spectator", "volunteer", "commissaire"] },
+  { label: "Événements",        href: "/AdminEvents",                 icon: Calendar,       roles: ["official", "athlete", "spectator", "volunteer"] },
+  { label: "Résultats",         href: "/results",                     icon: Trophy,         roles: ["admin", "official", "athlete", "spectator", "volunteer"] },
+  { label: "Vie privée",        href: "/vie-privee",                  icon: Users,          roles: ["admin", "official", "athlete", "spectator", "volunteer", "commissaire"] },
+  { label: "Sécurité",          href: "/security",                    icon: Shield,         roles: ["admin", "official", "volunteer"] },
+
+  // ── Admin ──
+  { label: "Administration",    href: "/admin",                       icon: Settings,       roles: ["admin"] },
+  { label: "Fan Zones",         href: "/admin/fanzones",              icon: Map,            roles: ["admin"] },
+  { label: "Carte athlètes",    href: "/admin/athletes/carte",        icon: Navigation,     roles: ["admin"] },
+  { label: "Analytics",         href: "/admin/analytics",             icon: BarChart3,      roles: ["admin"] },
+
+  // ── Commissaire ──
+  { label: "Validation",        href: "/commissaire",                 icon: ClipboardCheck, roles: ["commissaire"] },
+  { label: "Équipes",           href: "/commissaire/equipes",         icon: Users,          roles: ["commissaire"] },
+  { label: "Épreuves",          href: "/commissaire/epreuves",        icon: Trophy,         roles: ["commissaire"] },
+  { label: "Carte athlètes",    href: "/commissaire/athletes/carte",  icon: Map,            roles: ["commissaire"] },
+
+  // ── Athlète ──
+  { label: "Compléter profil",  href: "/athlete",                     icon: User,           roles: ["athlete"] },
+  { label: "Mes épreuves",      href: "/athlete/mes-epreuves",        icon: Calendar,       roles: ["athlete"] },
+  { label: "Mon équipe",        href: "/athlete/mon-equipe",          icon: Users,          roles: ["athlete"] },
+
+  // ── Volontaire ──
+  { label: "Compléter profil",  href: "/volunteer/profile",           icon: Users,          roles: ["volunteer"] },
+  { label: "Mon programme",     href: "/volunteer/program",           icon: Calendar,       roles: ["volunteer"] },
+
+  // ── Spectateur ──
+  { label: "Spectateurs",       href: "/spectator",                   icon: Eye,            roles: ["spectator"] },
+
+  // ── Géolocalisation ──
+  { label: "Fan Zones",         href: "/fanzones",                    icon: Navigation,     roles: ["spectator", "athlete", "volunteer"] },
 ]
 
-export function RoleBasedNav() {
-  const { user, isAuthenticated } = useAuth()
+const BACKEND_TO_UI: Record<string, string> = {
+  USER: "spectator",      ROLE_USER: "spectator",
+  ATHLETE: "athlete",     ROLE_ATHLETE: "athlete",
+  ADMIN: "admin",         ROLE_ADMIN: "admin",
+  COMMISSAIRE: "commissaire", ROLE_COMMISSAIRE: "commissaire",
+  VOLONTAIRE: "volunteer",    ROLE_VOLONTAIRE: "volunteer",
+}
 
-  if (!isAuthenticated || !user) {
+function normalizeRole(role?: string): string {
+  if (!role) return ""
+  return BACKEND_TO_UI[role.toUpperCase()] ?? role.toLowerCase()
+}
+
+interface RoleBasedNavProps {
+  mobile?: boolean
+  onClose?: () => void
+}
+
+export function RoleBasedNav({ mobile = false, onClose }: RoleBasedNavProps) {
+  const { user, isAuthenticated } = useAuth()
+  const pathname = usePathname()
+
+  const role = normalizeRole(user?.role)
+
+  const items = isAuthenticated && user
+    ? NAV_ITEMS.filter((item) => item.roles.includes(role))
+    : [
+        { label: "Événements", href: "/AdminEvents", icon: Calendar },
+        { label: "Résultats",  href: "/results",     icon: Trophy },
+        { label: "Fan Zones",  href: "/fanzones",    icon: Navigation },
+      ]
+
+  if (mobile) {
     return (
-      <nav className="hidden md:flex items-center space-x-6">
-        <Button variant="ghost" size="sm" className="flex items-center space-x-2" asChild>
-          <Link href="/AdminEvents">
-            <Calendar className="h-4 w-4" />
-            <span>Events</span>
-          </Link>
-        </Button>
-        <Button variant="ghost" size="sm" className="flex items-center space-x-2" asChild>
-          <Link href="/results">
-            <Trophy className="h-4 w-4" />
-            <span>Results</span>
-          </Link>
-        </Button>
-        <Button variant="ghost" size="sm" className="flex items-center space-x-2" asChild>
-          <Link href="/venues">
-            <MapPin className="h-4 w-4" />
-            <span>Venues</span>
-          </Link>
-        </Button>
+      <nav className="flex flex-col gap-0.5">
+        {items.map((item) => {
+          const Icon = item.icon
+          const active = pathname === item.href
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onClose}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                active
+                  ? "bg-green-50 text-green-700"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {item.label}
+            </Link>
+          )
+        })}
       </nav>
     )
   }
 
-  const userRole = user.role
-  // Normalize role: accept backend enum (USER, ADMIN, VOLONTAIRE...) or UI keys
-  const BACKEND_TO_UI_ROLE: Record<string, string> = {
-    USER: "spectator",
-    ROLE_USER: "spectator",
-    ATHLETE: "athlete",
-    ROLE_ATHLETE: "athlete",
-    ADMIN: "admin",
-    ROLE_ADMIN: "admin",
-    COMMISSAIRE: "commissaire",
-    ROLE_COMMISSAIRE: "commissaire",
-    VOLONTAIRE: "volunteer",
-    ROLE_VOLONTAIRE: "volunteer",
-  }
-
-  const rawRole = (userRole || "").toString()
-  let normalizedRole = rawRole
-  const upper = rawRole.toUpperCase()
-  if (BACKEND_TO_UI_ROLE[upper]) {
-    normalizedRole = BACKEND_TO_UI_ROLE[upper]
-  } else {
-    normalizedRole = rawRole.toLowerCase()
-  }
-
-  const allowedItems = navigationItems.filter((item) =>
-    item.roles.includes(normalizedRole) || item.roles.includes("all")
-  )
-
   return (
-    <nav className="hidden md:flex items-center space-x-6">
-      {allowedItems.map((item) => {
-        const IconComponent = item.icon
+    <nav className="hidden md:flex items-center gap-0.5">
+      {items.map((item) => {
+        const Icon = item.icon
+        const active = pathname === item.href
         return (
-          <Button 
-            key={item.href} 
-            variant="ghost" 
-            size="sm" 
-            className="flex items-center space-x-2" 
-            asChild
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${
+              active
+                ? "bg-green-50 text-green-700"
+                : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+            }`}
           >
-            <Link href={item.href}>
-              <IconComponent className="h-4 w-4" />
-              <span>{item.label}</span>
-            </Link>
-          </Button>
+            <Icon className="h-3.5 w-3.5 shrink-0" />
+            {item.label}
+          </Link>
         )
       })}
     </nav>

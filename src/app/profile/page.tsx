@@ -1,343 +1,260 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { toast } from "sonner"
-import { http } from "@/src/api/httpClient"
-import {
-  CheckCircle,
-  Clock,
-  Edit,
-  Eye,
-  FileText,
-  MessageSquare,
-  Save,
-  Upload,
-  X,
-  XCircle,
-} from "lucide-react"
-
-// ── Types ──────────────────────────────────────────────────────────────────────
+import { deleteMyAccount } from "../../api/authService"
 
 type StoredUser = {
   username?: string
   email?: string
   role?: string
-  uiRole?: string
   name?: string
   authenticated?: boolean
-  type?: string
 }
 
-interface AthleteDto {
-  id: number
-  username: string | null
-  nom: string | null
-  prenom: string | null
-  dateNaissance: string | null
-  pays: string | null
-  sexe: "MASCULIN" | "FEMININ" | null
-  valide: boolean
-  docs: {
-    certificatMedicalUrl: string | null
-    passportUrl: string | null
-    documentGenre: string | null
-  }
-  observation: string | null
-  equipeId: number | null
-  equipeNom: string | null
-  motifRefus: string | null
+const ROLE_LABELS: Record<string, { label: string; color: string }> = {
+  ADMIN: { label: "Administrateur", color: "bg-red-100 text-red-700" },
+  COMMISSAIRE: { label: "Commissaire", color: "bg-purple-100 text-purple-700" },
+  ATHLETE: { label: "Athlète", color: "bg-blue-100 text-blue-700" },
+  VOLUNTEER: { label: "Volontaire", color: "bg-green-100 text-green-700" },
+  SPECTATOR: { label: "Spectateur", color: "bg-gray-100 text-gray-700" },
 }
 
-interface Message {
-  id: number
-  contenu: string
-  athleteId: number
-  createdAt: string
+function getAuthHeaders() {
+  if (typeof window === "undefined") return {}
+  const token = localStorage.getItem("token") ?? localStorage.getItem("accessToken") ?? ""
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
-
-const API = "http://localhost:8080"
-
-function getToken(): string | null {
-  if (typeof window === "undefined") return null
-  return (
-    localStorage.getItem("token") ||
-    localStorage.getItem("accessToken") ||
-    sessionStorage.getItem("token") ||
-    sessionStorage.getItem("accessToken") ||
-    null
-  )
-}
-
-function decodeToken(jwt: string) {
+function getUsernameFromToken(jwt?: string | null): string | undefined {
+  if (!jwt) return undefined
+  const parts = jwt.split(".")
+  if (parts.length < 2) return undefined
   try {
-    const payload = jwt.split(".")[1]
-    return JSON.parse(
-      decodeURIComponent(
-        atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
-          .split("")
-          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-          .join("")
-      )
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")))
+    return (
+      payload?.preferred_username ||
+      payload?.username ||
+      (typeof payload?.sub === "string" ? payload.sub : undefined) ||
+      (typeof payload?.email === "string" ? payload.email.split("@")[0] : undefined)
     )
   } catch {
-    return {}
+    return undefined
   }
 }
-
-function getUserIdFromToken(jwt: string): number | null {
-  const p = decodeToken(jwt)
-  const candidate = p.userId ?? p.id ?? p.sub
-  const n = Number(candidate)
-  return !Number.isNaN(n) && Number.isFinite(n) ? Math.trunc(n) : null
-}
-
-function getUsernameFromToken(jwt: string): string | undefined {
-  const p = decodeToken(jwt)
-  return (
-    p?.preferred_username ||
-    p?.username ||
-    (typeof p?.sub === "string" ? p.sub : undefined) ||
-    (typeof p?.email === "string" ? p.email.split("@")[0] : undefined)
-  )
-}
-
-function athleteStatut(a: AthleteDto): "valide" | "refuse" | "attente" {
-  if (a.valide) return "valide"
-  if (a.motifRefus) return "refuse"
-  return "attente"
-}
-
-// ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function ProfilePage() {
-  const router = useRouter()
-
-  // Auth user
   const [user, setUser] = useState<StoredUser | null>(null)
-  const [tokenPreview, setTokenPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [authError, setAuthError] = useState<string | null>(null)
-  const [showDebug, setShowDebug] = useState(false)
-  const [debugResponse, setDebugResponse] = useState<any>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  // Athlete profile (only when role === ATHLETE)
-  const [athlete, setAthlete] = useState<AthleteDto | null>(null)
-  const [athleteLoading, setAthleteLoading] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([])
+  // Photo state
+  const [photo, setPhoto] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Edit info
-  const [editMode, setEditMode] = useState(false)
-  const [infoForm, setInfoForm] = useState({ nom: "", prenom: "", dateNaissance: "", pays: "", sexe: "" })
-  const [savingInfo, setSavingInfo] = useState(false)
+  // Edit state
+  const [editingDisplayName, setEditingDisplayName] = useState(false)
+  const [displayName, setDisplayName] = useState("")
+  const [bio, setBio] = useState("")
+  const [editingBio, setEditingBio] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
-  // Documents
-  const certRef = useRef<HTMLInputElement>(null)
-  const passRef = useRef<HTMLInputElement>(null)
-  const [uploadingDoc, setUploadingDoc] = useState<"cert" | "pass" | null>(null)
-
-  // Observation
-  const [obsMode, setObsMode] = useState(false)
-  const [obsText, setObsText] = useState("")
-  const [savingObs, setSavingObs] = useState(false)
-
-  // ── Load auth user ────────────────────────────────────────────────────────────
-
-  const loadProfile = async () => {
-    setLoading(true)
-    setAuthError(null)
+  async function handleDeleteAccount() {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer votre compte ? Cette action est irréversible.")) return;
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      const token = getToken()
-      setTokenPreview(token ? `${token.slice(0, 8)}...` : null)
+      await deleteMyAccount();
+      // Nettoyer le localStorage et rediriger
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = "/login";
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Erreur inconnue");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
-      if (!token) {
+  // Load photo + display name from localStorage
+  useEffect(() => {
+    const savedPhoto = localStorage.getItem("profile_photo")
+    const savedName = localStorage.getItem("profile_display_name")
+    const savedBio = localStorage.getItem("profile_bio")
+    if (savedPhoto) setPhoto(savedPhoto)
+    if (savedBio) setBio(savedBio)
+    if (savedName) setDisplayName(savedName)
+  }, [])
+
+  useEffect(() => {
+    async function loadProfile() {
+      setLoading(true)
+      setError(null)
+      try {
+        const token =
+          localStorage.getItem("token") ||
+          localStorage.getItem("accessToken") ||
+          sessionStorage.getItem("token") ||
+          sessionStorage.getItem("accessToken")
+
+        if (!token) {
+          setUser({ authenticated: false })
+          setError("Aucun jeton trouvé. Veuillez vous reconnecter.")
+          return
+        }
+
+        const username = getUsernameFromToken(token)
+        if (!username) {
+          setUser({ authenticated: false })
+          setError("Impossible de déterminer l'utilisateur.")
+          return
+        }
+
+        const res = await fetch(
+          `http://localhost:8080/auth/user/username/${encodeURIComponent(username)}`,
+          { headers: getAuthHeaders() }
+        )
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+        const data = await res.json()
+        const u: StoredUser = {
+          authenticated: true,
+          username: data?.username || username,
+          email: data?.email,
+          role: data?.role,
+          name: data?.username || username,
+        }
+        setUser(u)
+        // Init display name if not set
+        const saved = localStorage.getItem("profile_display_name")
+        if (!saved) setDisplayName(u.username ?? "")
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Erreur inconnue"
+        setError(`Impossible de charger le profil: ${msg}`)
         setUser({ authenticated: false })
-        setAuthError("Aucun jeton trouvé. Veuillez vous reconnecter.")
-        return
+      } finally {
+        setLoading(false)
       }
+    }
+    loadProfile()
+  }, [])
 
-      const username = getUsernameFromToken(token)
-      if (!username) {
-        setUser({ authenticated: false })
-        setAuthError("Impossible de déterminer l'utilisateur à partir du jeton.")
-        return
-      }
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string
+      setPhoto(dataUrl)
+      localStorage.setItem("profile_photo", dataUrl)
+    }
+    reader.readAsDataURL(file)
+  }
 
-      const res = await fetch(
-        `${API}/auth/user/username/${encodeURIComponent(username)}`,
-        { headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
-      )
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      setDebugResponse(data)
+  function saveDisplayName() {
+    localStorage.setItem("profile_display_name", displayName)
+    setEditingDisplayName(false)
+    showSaved()
+  }
 
-      const role: string = data?.role || decodeToken(token)?.role || ""
-      setUser({
-        authenticated: true,
-        username: data?.username || username,
-        email: data?.email,
-        role,
-        uiRole: role,
-        name: data?.username || username,
-        type: "Bearer",
-      })
+  function saveBio() {
+    localStorage.setItem("profile_bio", bio)
+    setEditingBio(false)
+    showSaved()
+  }
 
-      // Load athlete profile if role is ATHLETE
-      if (role === "ATHLETE") {
-        const id = getUserIdFromToken(token)
-        if (id) {
-          loadAthleteProfile(id, token)
-          loadMessages(id, token)
+  function showSaved() {
+    setSaveSuccess(true)
+    setTimeout(() => setSaveSuccess(false), 2000)
+  }
+
+  function removePhoto() {
+    setPhoto(null)
+    localStorage.removeItem("profile_photo")
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  function downloadFile(filename: string, data: Blob | string, mime = "application/json") {
+    const blob = data instanceof Blob ? data : new Blob([data], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleExport() {
+    setExportError(null)
+    setExporting(true)
+    try {
+      const token =
+        localStorage.getItem("token") ||
+        localStorage.getItem("accessToken") ||
+        sessionStorage.getItem("token") ||
+        sessionStorage.getItem("accessToken")
+
+      const username = getUsernameFromToken(token) || user?.username
+
+      // Try backend export endpoint first (if available)
+      if (username) {
+        try {
+          const res = await fetch(
+            `http://localhost:8080/auth/user/export/${encodeURIComponent(username)}`,
+            { headers: getAuthHeaders() }
+          )
+          if (res.ok) {
+            const contentType = res.headers.get("content-type") || "application/json"
+            const blob = await res.blob()
+            const ext = contentType.includes("json") ? "json" : "zip"
+            downloadFile(`export-${username}.${ext}`, blob, contentType)
+            setExporting(false)
+            return
+          }
+        } catch {
+          // backend not available or errored — fallback to client export
         }
       }
-    } catch (err) {
-      setAuthError(`Impossible de charger le profil: ${err instanceof Error ? err.message : "Erreur inconnue"}`)
-      setUser({ authenticated: false })
-    } finally {
-      setLoading(false)
-    }
-  }
 
-  // ── Load athlete data ─────────────────────────────────────────────────────────
-
-  const applyAthlete = (data: AthleteDto) => {
-    setAthlete(data)
-    setInfoForm({
-      nom: data.nom ?? "",
-      prenom: data.prenom ?? "",
-      dateNaissance: data.dateNaissance ?? "",
-      pays: data.pays ?? "",
-      sexe: data.sexe ?? "",
-    })
-    setObsText(data.observation ?? "")
-  }
-
-  const loadAthleteProfile = async (id: number, token: string) => {
-    setAthleteLoading(true)
-    const headers: HeadersInit = { Authorization: `Bearer ${token}` }
-    for (const url of [`${API}/athlete/${id}/info`, `${API}/athlete/${id}`]) {
-      try {
-        const res = await fetch(url, { headers })
-        if (res.status === 403) { router.replace("/unauthorized"); return }
-        if (res.ok) { applyAthlete(await res.json()); setAthleteLoading(false); return }
-      } catch { /* try next */ }
-    }
-    // No GET endpoint — seed blank profile so saves still work
-    setAthlete({
-      id, username: null, nom: null, prenom: null, dateNaissance: null,
-      pays: null, sexe: null, valide: false,
-      docs: { certificatMedicalUrl: null, passportUrl: null, documentGenre: null },
-      observation: null, equipeId: null, equipeNom: null, motifRefus: null,
-    })
-    setEditMode(true)
-    setAthleteLoading(false)
-  }
-
-  const loadMessages = async (id: number, token: string) => {
-    try {
-      const { data } = await http.get<Message[]>(`${API}/athlete/${id}/messages`)
-      setMessages(Array.isArray(data) ? data : [])
-    } catch { /* not critical */ }
-  }
-
-  useEffect(() => { loadProfile() }, [])
-
-  // ── Athlete handlers ──────────────────────────────────────────────────────────
-
-  const handleSaveInfo = async () => {
-    if (!athlete) return
-    try {
-      setSavingInfo(true)
-      const { data } = await http.post<AthleteDto>(`${API}/athlete/${athlete.id}/info`, {
-        nom: infoForm.nom,
-        prenom: infoForm.prenom,
-        dateNaissance: infoForm.dateNaissance,
-        pays: infoForm.pays,
-        sexe: infoForm.sexe || undefined,
-      })
-      applyAthlete(data)
-      setEditMode(false)
-      toast.success("Informations mises à jour")
-    } catch (err: any) {
-      if (err?.response?.status === 403) router.replace("/unauthorized")
-    } finally {
-      setSavingInfo(false)
-    }
-  }
-
-  const handleUploadDoc = async (type: "certificatMedical" | "passport", file: File) => {
-    if (!athlete) return
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      toast.error("Seuls les fichiers PDF sont acceptés")
-      return
-    }
-    const key = type === "certificatMedical" ? "cert" : "pass"
-    try {
-      setUploadingDoc(key)
-      const token = getToken()
-      const formData = new FormData()
-      formData.append(type, file)
-      // No manual Content-Type — browser sets it with the correct boundary
-      const res = await fetch(`${API}/athlete/${athlete.id}/doc/upload`, {
-        method: "POST",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: formData,
-      })
-      if (res.status === 403) { router.replace("/unauthorized"); return }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        toast.error(err.error || err.message || "Erreur lors de l'upload")
-        return
+      // Client-side export: assemble available profile data + local extras
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        account: user ?? null,
+        displayName: localStorage.getItem("profile_display_name") || null,
+        bio: localStorage.getItem("profile_bio") || null,
+        photoDataUrl: localStorage.getItem("profile_photo") || null,
+        localStorageSnapshot: {
+          // exclude tokens for security
+          profile_display_name: localStorage.getItem("profile_display_name"),
+          profile_bio: localStorage.getItem("profile_bio"),
+          profile_photo: localStorage.getItem("profile_photo"),
+        },
       }
-      const data: AthleteDto = await res.json()
-      setAthlete((prev) => prev ? { ...prev, docs: data.docs } : prev)
-      toast.success("Document uploadé avec succès")
-    } catch {
-      toast.error("Erreur lors de l'upload")
+
+      downloadFile(`export-${user?.username ?? "me"}.json`, JSON.stringify(exportData, null, 2), "application/json")
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : String(err))
     } finally {
-      setUploadingDoc(null)
+      setExporting(false)
     }
   }
 
-  const handleViewDoc = async (docType: "certificatMedical" | "passport") => {
-    if (!athlete) return
-    const token = getToken()
-    const res = await fetch(`${API}/athlete/${athlete.id}/doc/${docType}`, {
-      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    })
-    if (res.status === 404) { toast.error("Document non disponible"); return }
-    if (!res.ok) { toast.error("Erreur lors du chargement du document"); return }
-    window.open(URL.createObjectURL(await res.blob()), "_blank")
-  }
-
-  const handleSaveObs = async () => {
-    if (!athlete) return
-    try {
-      setSavingObs(true)
-      const { data } = await http.post<AthleteDto>(`${API}/athlete/${athlete.id}/remarque`, {
-        observation: obsText,
-      })
-      setAthlete(data)
-      setObsMode(false)
-      toast.success("Remarque enregistrée")
-    } catch (err: any) {
-      if (err?.response?.status === 403) router.replace("/unauthorized")
-    } finally {
-      setSavingObs(false)
-    }
-  }
-
-  // ── Loading ───────────────────────────────────────────────────────────────────
+  const roleInfo = user?.role ? (ROLE_LABELS[user.role] ?? { label: user.role, color: "bg-gray-100 text-gray-700" }) : null
+  const initials = (user?.username ?? "?").slice(0, 2).toUpperCase()
 
   if (loading) {
     return (
-      <div className="max-w-2xl mx-auto p-4">
-        <div className="text-center py-8">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-          <p className="mt-2 text-gray-600">Chargement du profil…</p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm text-gray-500">Chargement du profil…</p>
         </div>
       </div>
     )
@@ -345,331 +262,262 @@ export default function ProfilePage() {
 
   if (!user?.authenticated) {
     return (
-      <div className="max-w-2xl mx-auto p-4">
-        {authError && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm text-red-700">{authError}</p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 max-w-sm w-full text-center space-y-4">
+          <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto">
+            <span className="text-3xl">🔒</span>
           </div>
-        )}
-        <div className="flex flex-wrap gap-3">
+          <h2 className="text-lg font-semibold text-gray-900">Non authentifié</h2>
+          <p className="text-sm text-gray-500">{error ?? "Veuillez vous reconnecter."}</p>
           <Link href="/login">
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <button className="w-full py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors">
               Se connecter
             </button>
           </Link>
-          <button onClick={loadProfile} className="px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-            Réessayer
-          </button>
         </div>
       </div>
     )
   }
 
-  const isAthlete = user?.role === "ATHLETE"
-
-  // ── Render ────────────────────────────────────────────────────────────────────
-
   return (
-    <div className="max-w-2xl mx-auto p-4 space-y-6">
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="max-w-2xl mx-auto space-y-4">
 
-      {/* ── Carte compte ── */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Profil utilisateur</h2>
-          <p className="mt-1 text-sm text-gray-600">Informations de votre compte</p>
-        </div>
-        <div className="p-6 space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Nom d'utilisateur</div>
-              <div className="text-lg font-medium text-gray-900">{user?.username || "-"}</div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Email</div>
-              <div className="text-lg font-medium text-gray-900 flex items-center">
-                {user?.email || "-"}
-                {user?.email && <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">Vérifié</span>}
+        {/* Save feedback */}
+        {saveSuccess && (
+          <div className="fixed top-20 right-4 z-50 bg-green-600 text-white text-sm px-4 py-2.5 rounded-xl shadow-lg animate-fade-in">
+            ✓ Enregistré
+          </div>
+        )}
+
+        {/* Profile card */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+
+          {/* Banner */}
+          <div className="h-24 bg-gradient-to-r from-blue-500 to-indigo-600" />
+
+          {/* Avatar + basic info */}
+          <div className="px-6 pb-6">
+            <div className="flex items-end gap-4 -mt-12 mb-4">
+              {/* Avatar */}
+              <div className="relative shrink-0">
+                <div className="w-24 h-24 rounded-2xl border-4 border-white shadow-md overflow-hidden bg-blue-100 flex items-center justify-center">
+                  {photo ? (
+                    <img src={photo} alt="Photo de profil" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-3xl font-bold text-blue-600">{initials}</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 w-7 h-7 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-md hover:bg-blue-700 transition-colors text-sm"
+                  title="Changer la photo"
+                >
+                  ✎
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handlePhotoChange}
+                />
+              </div>
+
+              {/* Name + role */}
+              <div className="flex-1 min-w-0 pt-14">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-xl font-bold text-gray-900 truncate">
+                    {displayName || user.username}
+                  </h1>
+                  {roleInfo && (
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${roleInfo.color}`}>
+                      {roleInfo.label}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-500 truncate">@{user.username}</p>
               </div>
             </div>
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Rôle</div>
-              <div className="text-lg font-medium text-gray-900">
-                <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm">{user?.role || "-"}</span>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">Token</div>
-              <div className="flex items-center gap-2">
-                <code className="text-sm font-mono text-gray-700 bg-gray-50 px-2 py-1 rounded">{tokenPreview || "—"}</code>
-                <button onClick={() => setShowDebug(!showDebug)} className="text-xs text-gray-500 hover:text-gray-700">
-                  {showDebug ? "Masquer" : "Détails"}
+
+            {/* Photo actions */}
+            {photo && (
+              <div className="mb-4 flex gap-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  Changer la photo
+                </button>
+                <span className="text-gray-300">·</span>
+                <button
+                  onClick={removePhoto}
+                  className="text-xs text-red-500 hover:text-red-700 font-medium"
+                >
+                  Supprimer
                 </button>
               </div>
-            </div>
-          </div>
-
-          {showDebug && debugResponse && (
-            <pre className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded text-xs overflow-auto max-h-48">
-              {JSON.stringify(debugResponse, null, 2)}
-            </pre>
-          )}
-
-          <div className="pt-4 flex flex-wrap gap-3 border-t border-gray-200">
-            <Link href="/">
-              <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
-                ← Retour à l'accueil
+            )}
+            {!photo && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="mb-4 text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                + Ajouter une photo de profil
               </button>
-            </Link>
-            <button onClick={loadProfile} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-              Actualiser
-            </button>
+            )}
           </div>
         </div>
-      </div>
 
-      {/* ── Sections athlète ── */}
-      {isAthlete && (
-        <>
-          {athleteLoading ? (
-            <div className="text-center py-6">
-              <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-              <p className="mt-2 text-sm text-gray-500">Chargement du dossier athlète…</p>
-            </div>
-          ) : athlete ? (
-            <>
-              {/* Statut de validation */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Statut du dossier</p>
-                  {athleteStatut(athlete) === "valide" && (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                      <CheckCircle className="h-4 w-4" /> Dossier validé
-                    </span>
-                  )}
-                  {athleteStatut(athlete) === "attente" && (
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800">
-                      <Clock className="h-4 w-4" /> En attente de validation
-                    </span>
-                  )}
-                  {athleteStatut(athlete) === "refuse" && (
-                    <div>
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
-                        <XCircle className="h-4 w-4" /> Refusé
-                      </span>
-                      {athlete.motifRefus && (
-                        <p className="mt-2 text-sm text-red-600">Motif : {athlete.motifRefus}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-                {athlete.equipeNom && (
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500">Équipe</p>
-                    <p className="text-sm font-medium text-gray-900">{athlete.equipeNom}</p>
+        {/* Editable fields */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 divide-y divide-gray-100">
+        {/* Droit à l'oubli : suppression du compte */}
+        <div className="px-6 py-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Droit à l'oubli</p>
+          <button
+            className="py-2 px-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors disabled:opacity-60"
+            onClick={handleDeleteAccount}
+            disabled={deleting}
+          >
+            {deleting ? "Suppression en cours..." : "Supprimer mon compte"}
+          </button>
+          {deleteError && <p className="text-red-600 text-sm mt-2">{deleteError}</p>}
+        </div>
+
+          {/* Display name */}
+          <div className="px-6 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Nom affiché</p>
+                {editingDisplayName ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveDisplayName(); if (e.key === "Escape") setEditingDisplayName(false) }}
+                      className="flex-1 border border-blue-400 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      autoFocus
+                    />
+                    <button onClick={saveDisplayName} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                      Sauv.
+                    </button>
+                    <button onClick={() => setEditingDisplayName(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">
+                      ✕
+                    </button>
                   </div>
+                ) : (
+                  <p className="text-base font-medium text-gray-900">{displayName || user.username || "—"}</p>
                 )}
               </div>
+              {!editingDisplayName && (
+                <button
+                  onClick={() => setEditingDisplayName(true)}
+                  className="shrink-0 text-xs text-blue-600 hover:text-blue-800 font-medium mt-5"
+                >
+                  Modifier
+                </button>
+              )}
+            </div>
+          </div>
 
-              {/* Informations personnelles */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-gray-900">Informations personnelles</h3>
-                  {!editMode ? (
-                    <button
-                      onClick={() => setEditMode(true)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <Edit className="h-3.5 w-3.5" /> Modifier
-                    </button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleSaveInfo}
-                        disabled={savingInfo}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                      >
-                        <Save className="h-3.5 w-3.5" />
-                        {savingInfo ? "Enregistrement…" : "Enregistrer"}
-                      </button>
-                      <button
-                        onClick={() => setEditMode(false)}
-                        disabled={savingInfo}
-                        className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div className="p-6">
-                  {!editMode ? (
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      {[
-                        ["Nom", athlete.nom],
-                        ["Prénom", athlete.prenom],
-                        ["Date de naissance", athlete.dateNaissance],
-                        ["Pays", athlete.pays],
-                        ["Sexe", athlete.sexe === "MASCULIN" ? "Masculin" : athlete.sexe === "FEMININ" ? "Féminin" : null],
-                      ].map(([label, value]) => (
-                        <div key={label as string}>
-                          <p className="text-xs text-gray-500 uppercase tracking-wider">{label}</p>
-                          <p className="font-medium text-gray-900 mt-0.5">{value || "—"}</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-4">
-                      {([
-                        { key: "nom", label: "Nom", type: "text" },
-                        { key: "prenom", label: "Prénom", type: "text" },
-                        { key: "dateNaissance", label: "Date de naissance", type: "date" },
-                        { key: "pays", label: "Pays", type: "text" },
-                      ] as { key: keyof typeof infoForm; label: string; type: string }[]).map(({ key, label, type }) => (
-                        <div key={key} className="space-y-1">
-                          <label className="text-xs font-medium text-gray-700">{label}</label>
-                          <input
-                            type={type}
-                            value={infoForm[key]}
-                            onChange={(e) => setInfoForm((p) => ({ ...p, [key]: e.target.value }))}
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                      ))}
-                      <div className="space-y-1 col-span-2">
-                        <label className="text-xs font-medium text-gray-700">Sexe</label>
-                        <select
-                          value={infoForm.sexe}
-                          onChange={(e) => setInfoForm((p) => ({ ...p, sexe: e.target.value }))}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="">Sélectionner</option>
-                          <option value="MASCULIN">Masculin</option>
-                          <option value="FEMININ">Féminin</option>
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Documents */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200">
-                  <h3 className="text-base font-semibold text-gray-900">Mes documents</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">PDF uniquement</p>
-                </div>
-                <div className="p-6 space-y-3">
-                  {([
-                    { type: "certificatMedical" as const, label: "Certificat médical", url: athlete.docs.certificatMedicalUrl, ref: certRef, key: "cert" as const },
-                    { type: "passport" as const, label: "Passeport", url: athlete.docs.passportUrl, ref: passRef, key: "pass" as const },
-                  ]).map(({ type, label, url, ref, key }) => (
-                    <div key={type} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-5 w-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{label}</p>
-                          <p className="text-xs text-gray-500">{url ? "Document fourni" : "Aucun document uploadé"}</p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        {url && (
-                          <button
-                            onClick={() => handleViewDoc(type)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                          >
-                            <Eye className="h-3.5 w-3.5" /> Voir
-                          </button>
-                        )}
-                        <button
-                          onClick={() => ref.current?.click()}
-                          disabled={uploadingDoc === key}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                        >
-                          <Upload className="h-3.5 w-3.5" />
-                          {uploadingDoc === key ? "Upload…" : url ? "Remplacer" : "Uploader"}
-                        </button>
-                        <input
-                          ref={ref}
-                          type="file"
-                          accept=".pdf"
-                          className="hidden"
-                          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadDoc(type, f) }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Remarque personnelle */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-gray-900">Ma remarque</h3>
-                  {!obsMode ? (
-                    <button
-                      onClick={() => setObsMode(true)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <Edit className="h-3.5 w-3.5" /> Modifier
-                    </button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleSaveObs}
-                        disabled={savingObs}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                      >
-                        <Save className="h-3.5 w-3.5" />
-                        {savingObs ? "Enregistrement…" : "Enregistrer"}
-                      </button>
-                      <button onClick={() => setObsMode(false)} className="p-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div className="p-6">
-                  {!obsMode ? (
-                    <p className="text-sm text-gray-700">{athlete.observation || "Aucune remarque renseignée."}</p>
-                  ) : (
+          {/* Bio */}
+          <div className="px-6 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">Biographie</p>
+                {editingBio ? (
+                  <div className="space-y-2">
                     <textarea
-                      rows={4}
-                      value={obsText}
-                      onChange={(e) => setObsText(e.target.value)}
-                      placeholder="Saisissez votre remarque…"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      value={bio}
+                      onChange={(e) => setBio(e.target.value)}
+                      rows={3}
+                      placeholder="Parlez de vous…"
+                      className="w-full border border-blue-400 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+                      autoFocus
                     />
-                  )}
-                </div>
-              </div>
-
-              {/* Messages du commissaire */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-gray-500" />
-                  <h3 className="text-base font-semibold text-gray-900">Messages du commissaire</h3>
-                </div>
-                <div className="p-6">
-                  {messages.length === 0 ? (
-                    <p className="text-sm text-gray-500">Aucun message reçu.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {messages.map((msg) => (
-                        <div key={msg.id} className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                          <p className="text-sm text-gray-800">{msg.contenu}</p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {new Date(msg.createdAt).toLocaleString("fr-FR")}
-                          </p>
-                        </div>
-                      ))}
+                    <div className="flex gap-2">
+                      <button onClick={saveBio} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        Sauvegarder
+                      </button>
+                      <button onClick={() => setEditingBio(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">
+                        Annuler
+                      </button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {bio || <span className="text-gray-400 italic">Aucune biographie</span>}
+                  </p>
+                )}
               </div>
-            </>
-          ) : null}
-        </>
-      )}
+              {!editingBio && (
+                <button
+                  onClick={() => setEditingBio(true)}
+                  className="shrink-0 text-xs text-blue-600 hover:text-blue-800 font-medium mt-5"
+                >
+                  Modifier
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Read-only account info */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-900">Informations du compte</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Ces informations sont gérées par le serveur</p>
+          </div>
+          <div className="divide-y divide-gray-100">
+            <div className="px-6 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Nom d'utilisateur</p>
+                <p className="text-sm font-medium text-gray-900">@{user.username}</p>
+              </div>
+              <span className="text-gray-300 text-lg">🔒</span>
+            </div>
+            <div className="px-6 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Adresse e-mail</p>
+                <p className="text-sm font-medium text-gray-900">{user.email || "—"}</p>
+              </div>
+              {user.email && (
+                <span className="text-xs bg-green-50 text-green-600 border border-green-200 px-2 py-0.5 rounded-full font-medium">Vérifié</span>
+              )}
+            </div>
+            <div className="px-6 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Rôle</p>
+                {roleInfo ? (
+                  <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${roleInfo.color}`}>
+                    {roleInfo.label}
+                  </span>
+                ) : (
+                  <p className="text-sm font-medium text-gray-900">{user.role || "—"}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="py-2.5 px-4 text-sm text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+          >
+            {exporting ? "Export en cours…" : "Exporter mes données"}
+          </button>
+          <Link href="/" className="flex-1">
+            <button className="w-full py-2.5 text-sm text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors font-medium">
+              ← Retour à l'accueil
+            </button>
+          </Link>
+        </div>
+
+      </div>
     </div>
   )
 }
