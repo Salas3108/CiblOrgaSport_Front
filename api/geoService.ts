@@ -13,7 +13,8 @@ import type {
 // ---------------------------------------------------------------------------
 // Instance Axios dédiée au geolocation-service
 // ---------------------------------------------------------------------------
-const geoHttp = axios.create({ baseURL: '/api/geo' });
+const GEO_BASE = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'}/api/geo`;
+const geoHttp = axios.create({ baseURL: GEO_BASE });
 
 geoHttp.interceptors.request.use((config) => {
   const token = getTokenFromStorage();

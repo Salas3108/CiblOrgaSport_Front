@@ -96,8 +96,8 @@ export function RoleBasedNav({ mobile = false, onClose }: RoleBasedNavProps) {
               onClick={onClose}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                 active
-                  ? "bg-green-50 text-green-700"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  ? "bg-white/20 text-white font-semibold"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -118,10 +118,10 @@ export function RoleBasedNav({ mobile = false, onClose }: RoleBasedNavProps) {
           <Link
             key={item.href}
             href={item.href}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium transition-all duration-200 ${
               active
-                ? "bg-green-50 text-green-700"
-                : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                ? "bg-white/20 text-white font-semibold"
+                : "text-white/70 hover:bg-white/10 hover:text-white"
             }`}
           >
             <Icon className="h-3.5 w-3.5 shrink-0" />

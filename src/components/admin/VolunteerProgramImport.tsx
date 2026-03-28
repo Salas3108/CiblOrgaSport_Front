@@ -38,8 +38,6 @@ interface TaskTemplate {
   requiredLanguages?: string[]
 }
 
-export default VolunteerProgramImport;
-
 // Fonction pour convertir enum en texte lisible (ex: ACCUEIL -> "Accueil")
 const formatTaskTypeName = (taskType: string): string => {
   return taskType
@@ -1049,3 +1047,5 @@ function VolunteerProgramImport() {
     </div>
   )
 }
+
+export default VolunteerProgramImport;
