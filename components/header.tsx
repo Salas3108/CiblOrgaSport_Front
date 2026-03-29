@@ -106,6 +106,40 @@ export function Header() {
                           </div>
                           Mon profil
                         </Link>
+
+                        {/* Compléter profil (rôle spécifique) */}
+                        {(() => {
+                          const roleKey = (user?.role ?? "").toLowerCase()
+                          if (roleKey === "athlete") {
+                            return (
+                              <Link
+                                href="/athlete"
+                                onClick={() => setUserMenuOpen(false)}
+                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                              >
+                                <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center">
+                                  <User className="h-3.5 w-3.5 text-gray-500" />
+                                </div>
+                                Compléter profil
+                              </Link>
+                            )
+                          }
+                          if (roleKey === "volunteer" || roleKey === "volontaire") {
+                            return (
+                              <Link
+                                href="/volunteer/profile"
+                                onClick={() => setUserMenuOpen(false)}
+                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                              >
+                                <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center">
+                                  <User className="h-3.5 w-3.5 text-gray-500" />
+                                </div>
+                                Compléter profil
+                              </Link>
+                            )
+                          }
+                          return null
+                        })()}
                         <div className="mx-3 border-t border-gray-100 my-1" />
                         <button
                           onClick={() => { logout(); setUserMenuOpen(false) }}

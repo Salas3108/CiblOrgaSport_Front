@@ -36,12 +36,10 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Carte athlètes",    href: "/commissaire/athletes/carte",  icon: Map,            roles: ["commissaire"] },
 
   // ── Athlète ──
-  { label: "Compléter profil",  href: "/athlete",                     icon: User,           roles: ["athlete"] },
   { label: "Mes épreuves",      href: "/athlete/mes-epreuves",        icon: Calendar,       roles: ["athlete"] },
   { label: "Mon équipe",        href: "/athlete/mon-equipe",          icon: Users,          roles: ["athlete"] },
 
   // ── Volontaire ──
-  { label: "Compléter profil",  href: "/volunteer/profile",           icon: Users,          roles: ["volunteer"] },
   { label: "Mon programme",     href: "/volunteer/program",           icon: Calendar,       roles: ["volunteer"] },
 
   // ── Spectateur ──
