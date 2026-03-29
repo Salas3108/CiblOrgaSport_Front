@@ -122,7 +122,7 @@ export default function FanZonesPage() {
   const mapCenter: [number, number] = isRealPosition ? [lat, lng] : PARIS_CENTER;
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex bg-gray-50 overflow-hidden" style={{ height: 'calc(100vh - 64px)' }}>
       {/* ── Panneau gauche ── */}
       <aside className="w-80 bg-white border-r border-gray-200 flex flex-col">
         {/* Titre */}

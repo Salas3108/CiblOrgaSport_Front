@@ -124,3 +124,19 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Leaflet popups et tooltips au-dessus du header sticky */
+.leaflet-pane,
+.leaflet-popup-pane,
+.leaflet-tooltip-pane {
+  z-index: 400 !important;
+}
+.leaflet-popup {
+  z-index: 1000 !important;
+}
+.leaflet-tooltip {
+  z-index: 1000 !important;
+}
+.leaflet-control-container {
+  z-index: 800 !important;
+}
