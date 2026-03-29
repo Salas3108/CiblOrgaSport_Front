@@ -20,7 +20,7 @@ function getAdminAuthToken() {
 export async function deleteMyAccount() {
   const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
   if (!token) throw new Error('Token manquant');
-  const res = await fetch('http://localhost:8080/auth/delete-account', {
+  const res = await fetch('http://137.74.133.131/auth/delete-account', {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -106,7 +106,7 @@ export async function createAthleteProfile(athleteId: number, athleteUsername: s
   if (!token) {
     throw new Error("Token admin introuvable");
   }
-  const requestUrl = `http://localhost:8087/api/athlete/${athleteId}`;
+  const requestUrl = `http://137.74.133.131/api/athlete/${athleteId}`;
   const body = { username: athleteUsername };
   console.log('[createAthleteProfile] Request', {
     url: requestUrl,

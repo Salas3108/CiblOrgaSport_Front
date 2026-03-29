@@ -68,7 +68,7 @@ export default function BilletteriePage() {
       const storedToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null
       if (storedToken) {
         try {
-          const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080'
+          const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://137.74.133.131'
           const res = await fetch(`${baseUrl}/auth/me`, {
             headers: {
               'Authorization': `Bearer ${storedToken}`,

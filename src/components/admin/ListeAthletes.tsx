@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 async function fetchAthletes(validated?: boolean) {
   const token = localStorage.getItem('token');
-  let url = 'http://localhost:8080/auth/admin/athletes';
+  let url = 'http://137.74.133.131/auth/admin/athletes';
   if (validated !== undefined) url += `?validated=${validated}`;
   const res = await fetch(url, {
     headers: {

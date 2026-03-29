@@ -2,7 +2,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 
 // Tout passe par le gateway sur le port 8080
-const GATEWAY = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080';
+const GATEWAY = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://137.74.133.131';
 
 export const apiBases = {
   // Tous les services passent par le gateway

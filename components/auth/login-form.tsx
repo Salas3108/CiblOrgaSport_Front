@@ -35,7 +35,7 @@ function decodeJwtPayload(token: string | null) {
 }
 
 // Prefer gateway so browser calls go through proxy and avoid CORS issues
-const DEFAULT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
+const DEFAULT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://137.74.133.131"
 const getApiBaseUrl = (): string => {
   try {
     const url = assertApiBaseUrlOrThrow()
@@ -101,7 +101,7 @@ export function LoginForm() {
       setApiBaseUrl(null)
       setError(
         e?.message ||
-          'URL de base API manquante. Créez ".env.local" avec NEXT_PUBLIC_API_BASE_URL ou l’application utilisera "http://localhost:8080". Redémarrez le serveur de dev.'
+          'URL de base API manquante. Créez ".env.local" avec NEXT_PUBLIC_API_BASE_URL ou l’application utilisera "http://137.74.133.131". Redémarrez le serveur de dev.'
       )
       devLog("[LoginForm] API base URL error:", e)
     }
@@ -271,8 +271,8 @@ export function LoginForm() {
             </span>
           ) : (
             <span className="block mt-2 text-xs text-red-600">
-              NEXT_PUBLIC_API_BASE_URL est manquant dans .env.local. Utilisation de "http://localhost:8080". Exemple :
-              NEXT_PUBLIC_API_BASE_URL="http://localhost:8080". Après l’ajout, redémarrez : "npm run dev".
+              NEXT_PUBLIC_API_BASE_URL est manquant dans .env.local. Utilisation de "http://137.74.133.131". Exemple :
+              NEXT_PUBLIC_API_BASE_URL="http://137.74.133.131". Après l’ajout, redémarrez : "npm run dev".
             </span>
           )}
           <span className="block mt-2 text-xs text-muted-foreground">

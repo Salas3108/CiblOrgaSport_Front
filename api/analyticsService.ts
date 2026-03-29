@@ -4,7 +4,7 @@
 
 import type { DailyStats, TodayStats } from '@/types/analytics'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8080'
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://137.74.133.131'
 
 function authHeaders(): Record<string, string> {
   if (typeof window === 'undefined') return {}

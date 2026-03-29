@@ -31,7 +31,7 @@ const BACKEND_ROLE_MAP: Record<string, string> = {
 }
 
 // Default to gateway so browser clients call the gateway (which should proxy to auth service)
-const DEFAULT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
+const DEFAULT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://137.74.133.131"
 const getApiBaseUrl = (): string => {
   try {
     const url = assertApiBaseUrlOrThrow()
@@ -72,7 +72,7 @@ export function RegisterForm() {
       setApiBaseUrl(null)
       setError(
         e?.message ||
-          'Missing API base URL. Create ".env.local" with NEXT_PUBLIC_API_BASE_URL or the app will fallback to "http://localhost:8080". Restart the dev server.'
+          'Missing API base URL. Create ".env.local" with NEXT_PUBLIC_API_BASE_URL or the app will fallback to "http://137.74.133.131". Restart the dev server.'
       )
       devLog("[RegisterForm] API base URL error:", e)
     }
@@ -175,7 +175,7 @@ export function RegisterForm() {
             </span>
           ) : (
             <span className="block mt-2 text-xs text-red-600">
-              NEXT_PUBLIC_API_BASE_URL manquant dans .env.local. Utilisation de "http://localhost:8080".
+              NEXT_PUBLIC_API_BASE_URL manquant dans .env.local. Utilisation de "http://137.74.133.131".
             </span>
           )}
         </CardDescription>

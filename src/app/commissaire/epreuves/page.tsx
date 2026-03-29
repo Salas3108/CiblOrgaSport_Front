@@ -81,7 +81,7 @@ const normalizeEpreuve = (epreuve: any): Epreuve => {
   }
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://137.74.133.131"
 
 // Vérifier la configuration au chargement
 if (typeof window !== "undefined" && !process.env.NEXT_PUBLIC_API_BASE_URL) {
@@ -198,7 +198,7 @@ export default function CommissaireEpreuvesPage() {
       
       if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
         toast.error("Impossible d'atteindre le serveur. Vérifiez que le backend est démarré sur le port 8080")
-        console.error("❌ Erreur réseau. Backend accessible sur http://localhost:8080 ?")
+        console.error("❌ Erreur réseau. Backend accessible sur http://137.74.133.131 ?")
       } else {
         toast.error(`Erreur de chargement des athlètes: ${errorMessage}`)
       }

@@ -115,7 +115,7 @@ export default function ProfilePage() {
         }
 
         const res = await fetch(
-          `http://localhost:8080/auth/user/username/${encodeURIComponent(username)}`,
+          `http://137.74.133.131/auth/user/username/${encodeURIComponent(username)}`,
           { headers: getAuthHeaders() }
         )
 
@@ -207,7 +207,7 @@ export default function ProfilePage() {
       if (username) {
         try {
           const res = await fetch(
-            `http://localhost:8080/auth/user/export/${encodeURIComponent(username)}`,
+            `http://137.74.133.131/auth/user/export/${encodeURIComponent(username)}`,
             { headers: getAuthHeaders() }
           )
           if (res.ok) {

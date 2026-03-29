@@ -51,7 +51,7 @@ export default function IncidentPage() {
     setError(null);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:8080/api/incidents', {
+      const response = await fetch('http://137.74.133.131/api/incidents', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -129,7 +129,7 @@ export default function IncidentPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:8080/api/incidents', {
+      const response = await fetch('http://137.74.133.131/api/incidents', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -185,7 +185,7 @@ export default function IncidentPage() {
         // Le backend gère les dates, on peut les laisser comme elles sont
       };
 
-      const response = await fetch(`http://localhost:8080/api/incidents/${incidentId}`, {
+      const response = await fetch(`http://137.74.133.131/api/incidents/${incidentId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
