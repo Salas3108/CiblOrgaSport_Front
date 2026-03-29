@@ -6,8 +6,7 @@ import { ProtectedRoute } from "@/components/auth/protected-route"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { getUserId } from "@/lib/jwt"
-import { getAthleteResults, type AthleteResult } from "@/src/api/resultsService"
+import { getMyResults, type AthleteResult } from "@/src/api/resultsService"
 
 function getMedalLabel(medaille: AthleteResult["medaille"]) {
   if (medaille === "OR") return "Or"
@@ -32,7 +31,6 @@ export default function ResultsPage() {
   const [results, setResults] = useState<AthleteResult[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [athleteId, setAthleteId] = useState<number | null>(null)
 
   const sortedResults = useMemo(() => {
     return [...results].sort((a, b) => {
@@ -50,11 +48,11 @@ export default function ResultsPage() {
     })
   }, [results])
 
-  const loadResults = async (id: number) => {
+  const loadResults = async () => {
     try {
       setLoading(true)
       setError(null)
-      const data = await getAthleteResults(id)
+      const data = await getMyResults()
       setResults(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur lors du chargement des résultats")
@@ -65,16 +63,7 @@ export default function ResultsPage() {
   }
 
   useEffect(() => {
-    const id = getUserId()
-    if (!id) {
-      setAthleteId(null)
-      setError("Impossible d'identifier l'athlète connecté")
-      setLoading(false)
-      return
-    }
-
-    setAthleteId(id)
-    loadResults(id)
+    loadResults()
   }, [])
 
   return (
@@ -107,11 +96,9 @@ export default function ResultsPage() {
                   <div className="text-center py-12">
                     <AlertCircle className="h-10 w-10 text-red-500 mx-auto" />
                     <p className="mt-3 text-sm text-muted-foreground">{error}</p>
-                    {athleteId && (
-                      <Button onClick={() => loadResults(athleteId)} className="mt-4">
-                        Réessayer
-                      </Button>
-                    )}
+                    <Button onClick={loadResults} className="mt-4">
+                      Réessayer
+                    </Button>
                   </div>
                 ) : sortedResults.length === 0 ? (
                   <div className="text-center py-12">

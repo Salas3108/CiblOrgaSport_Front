@@ -5,6 +5,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, Calendar, Clock, MapPin } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog"
+import { declarerForfait, getStatutParticipation } from "@/src/api/eventsService"
+import { toast } from "sonner"
 
 interface AthleteEpreuve {
   id: number
@@ -13,39 +24,36 @@ interface AthleteEpreuve {
   typeEpreuve?: "INDIVIDUELLE" | "COLLECTIVE"
   niveauEpreuve?: "QUALIFICATION" | "QUART_DE_FINALE" | "DEMI_FINALE" | "FINALE"
   genreEpreuve?: "FEMININ" | "MASCULIN" | "MIXTE"
-  // Données du backend
-  dateHeure?: string  // Format ISO: "2024-03-15T14:30:00"
+  dateHeure?: string
   dureeMinutes?: number
   lieuId?: number
-  // Données calculées pour compatibilité
   date?: string
   heureDebut?: string
   heureFin?: string
   lieu?: { id?: number; nom?: string | null } | null
 }
 
-// Fonction pour extraire la date d'un dateHeure ISO
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://137.74.133.131"
+
 const extractDate = (dateHeure?: string): string | undefined => {
   if (!dateHeure) return undefined
   try {
-    return dateHeure.split('T')[0]
+    return dateHeure.split("T")[0]
   } catch {
     return undefined
   }
 }
 
-// Fonction pour extraire l'heure de début d'un dateHeure ISO
 const extractHeureDebut = (dateHeure?: string): string | undefined => {
   if (!dateHeure) return undefined
   try {
-    const timePart = dateHeure.split('T')[1]
+    const timePart = dateHeure.split("T")[1]
     return timePart ? timePart.substring(0, 5) : undefined
   } catch {
     return undefined
   }
 }
 
-// Fonction pour calculer l'heure de fin
 const calculateHeureFin = (dateHeure?: string, dureeMinutes?: number): string | undefined => {
   if (!dateHeure || !dureeMinutes) return undefined
   try {
@@ -57,31 +65,28 @@ const calculateHeureFin = (dateHeure?: string, dureeMinutes?: number): string | 
   }
 }
 
-// Normaliser une épreuve avec les champs calculés
-const normalizeEpreuve = (epreuve: AthleteEpreuve): AthleteEpreuve => {
-  return {
-    ...epreuve,
-    date: epreuve.date || extractDate(epreuve.dateHeure),
-    heureDebut: epreuve.heureDebut || extractHeureDebut(epreuve.dateHeure),
-    heureFin: epreuve.heureFin || calculateHeureFin(epreuve.dateHeure, epreuve.dureeMinutes),
-    lieu: epreuve.lieu || (epreuve.lieuId ? { id: epreuve.lieuId, nom: null } : null)
-  }
-}
+const normalizeEpreuve = (epreuve: AthleteEpreuve): AthleteEpreuve => ({
+  ...epreuve,
+  date: epreuve.date || extractDate(epreuve.dateHeure),
+  heureDebut: epreuve.heureDebut || extractHeureDebut(epreuve.dateHeure),
+  heureFin: epreuve.heureFin || calculateHeureFin(epreuve.dateHeure, epreuve.dureeMinutes),
+  lieu: epreuve.lieu || (epreuve.lieuId ? { id: epreuve.lieuId, nom: null } : null),
+})
 
 function getTypeEpreuveLabel(type: string): string {
   const labels: Record<string, string> = {
-    "INDIVIDUELLE": "Individuelle",
-    "COLLECTIVE": "Collective"
+    INDIVIDUELLE: "Individuelle",
+    COLLECTIVE: "Collective",
   }
   return labels[type] || type
 }
 
 function getNiveauEpreuveLabel(niveau: string): string {
   const labels: Record<string, string> = {
-    "QUALIFICATION": "Qualification",
-    "QUART_DE_FINALE": "Quart de finale",
-    "DEMI_FINALE": "Demi-finale",
-    "FINALE": "Finale"
+    QUALIFICATION: "Qualification",
+    QUART_DE_FINALE: "Quart de finale",
+    DEMI_FINALE: "Demi-finale",
+    FINALE: "Finale",
   }
   return labels[niveau] || niveau
 }
@@ -89,14 +94,12 @@ function getNiveauEpreuveLabel(niveau: string): string {
 function getGenreEpreuveLabel(genre: string | undefined): string {
   if (!genre) return ""
   const labels: Record<string, string> = {
-    "FEMININ": "Féminin",
-    "MASCULIN": "Masculin",
-    "MIXTE": "Mixte"
+    FEMININ: "Féminin",
+    MASCULIN: "Masculin",
+    MIXTE: "Mixte",
   }
   return labels[genre] || genre
 }
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://137.74.133.131"
 
 const getAuthHeaders = () => {
   if (typeof window === "undefined") return { "Content-Type": "application/json" }
@@ -105,9 +108,11 @@ const getAuthHeaders = () => {
     localStorage.getItem("accessToken") ||
     sessionStorage.getItem("token") ||
     sessionStorage.getItem("accessToken")
-  return token
-    ? { "Content-Type": "application/json", "Authorization": `Bearer ${token}` }
-    : { "Content-Type": "application/json" }
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  return headers
 }
 
 const getUserIdFromToken = (): number | null => {
@@ -145,58 +150,10 @@ export default function MesEpreuvesPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const formatDateHeureLabel = (epreuve: AthleteEpreuve) => {
-    if (epreuve.dateHeure) {
-      const parsed = new Date(epreuve.dateHeure)
-      if (!Number.isNaN(parsed.getTime())) {
-        return parsed.toLocaleString("fr-FR", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit"
-        })
-      }
-    }
-
-    if (epreuve.date && epreuve.heureDebut && epreuve.heureFin) {
-      return `${new Date(epreuve.date).toLocaleDateString("fr-FR")} ${epreuve.heureDebut} - ${epreuve.heureFin}`
-    }
-
-    if (epreuve.date) {
-      return new Date(epreuve.date).toLocaleDateString("fr-FR")
-    }
-
-    return "Date/heure non définie"
-  }
-
-  const formatHeureOnlyLabel = (epreuve: AthleteEpreuve) => {
-    if (epreuve.heureDebut && epreuve.heureFin) {
-      return `${epreuve.heureDebut} - ${epreuve.heureFin}`
-    }
-    if (epreuve.heureDebut) {
-      return epreuve.heureDebut
-    }
-    if (epreuve.dateHeure) {
-      const parsed = new Date(epreuve.dateHeure)
-      if (!Number.isNaN(parsed.getTime())) {
-        return parsed.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
-      }
-    }
-    return "Heure non définie"
-  }
-
-  const getLieuLabel = (epreuve: AthleteEpreuve) => {
-    const directNom = epreuve.lieu?.nom?.trim()
-    if (directNom) return directNom
-
-    const lieuId = epreuve.lieuId ?? epreuve.lieu?.id
-    if (lieuId && lieuxById[lieuId]) {
-      return lieuxById[lieuId]
-    }
-
-    return "Lieu non défini"
-  }
+  const [selectedEpreuve, setSelectedEpreuve] = useState<null | { id: number; nom?: string }>(null)
+  const [detailsForfait, setDetailsForfait] = useState("")
+  const [submittingForfait, setSubmittingForfait] = useState(false)
+  const [forfaitByEpreuve, setForfaitByEpreuve] = useState<Record<number, { dateForfait?: string; statut?: string }>>({})
 
   const resolveAthleteId = () => {
     if (typeof window === "undefined") return null
@@ -225,7 +182,7 @@ export default function MesEpreuvesPage() {
       setError(null)
 
       const assignmentsResponse = await fetch(`${API_BASE_URL}/api/commissaire/epreuves/assignments`, {
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
       })
       if (!assignmentsResponse.ok) {
         throw new Error(`Erreur lors du chargement des assignations (${assignmentsResponse.status})`)
@@ -243,40 +200,25 @@ export default function MesEpreuvesPage() {
       }
 
       const epreuvesResponse = await fetch(`${API_BASE_URL}/epreuves`, {
-        headers: getAuthHeaders()
+        headers: getAuthHeaders(),
       })
       if (!epreuvesResponse.ok) {
         throw new Error(`Erreur lors du chargement des epreuves (${epreuvesResponse.status})`)
       }
 
-      // Récupérer les lieux pour résoudre les noms à partir de lieuId
-      const lieuxResponse = await fetch(`${API_BASE_URL}/lieux`, {
-        headers: getAuthHeaders()
-      })
-
+      const lieuxResponse = await fetch(`${API_BASE_URL}/lieux`, { headers: getAuthHeaders() })
       const lieuxMap: Record<number, string> = {}
       if (lieuxResponse.ok) {
         const lieuxData = await lieuxResponse.json()
-        const lieuxList = Array.isArray(lieuxData)
-          ? lieuxData
-          : Array.isArray(lieuxData?.lieux)
-            ? lieuxData.lieux
-            : []
-
+        const lieuxList = Array.isArray(lieuxData) ? lieuxData : Array.isArray(lieuxData?.lieux) ? lieuxData.lieux : []
         lieuxList.forEach((lieu: any) => {
-          if (typeof lieu?.id === "number") {
-            lieuxMap[lieu.id] = lieu?.nom || `Lieu #${lieu.id}`
-          }
+          if (typeof lieu?.id === "number") lieuxMap[lieu.id] = lieu?.nom || `Lieu #${lieu.id}`
         })
       }
       setLieuxById(lieuxMap)
 
       const epreuvesData = await epreuvesResponse.json()
-      const list = Array.isArray(epreuvesData)
-        ? epreuvesData
-        : Array.isArray(epreuvesData?.epreuves)
-          ? epreuvesData.epreuves
-          : []
+      const list = Array.isArray(epreuvesData) ? epreuvesData : Array.isArray(epreuvesData?.epreuves) ? epreuvesData.epreuves : []
       const filtered = list
         .filter((epreuve: AthleteEpreuve) => assignedEpreuveIds.includes(epreuve.id))
         .map((epreuve: AthleteEpreuve) => normalizeEpreuve(epreuve))
@@ -287,12 +229,11 @@ export default function MesEpreuvesPage() {
             ...epreuve,
             lieu: {
               id: resolvedLieuId,
-              nom: epreuve.lieu?.nom || resolvedNom || null
-            }
+              nom: epreuve.lieu?.nom || resolvedNom || null,
+            },
           }
         })
-      
-      console.log("✅ Épreuves chargées et normalisées:", filtered)
+
       setEpreuves(filtered)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inconnue")
@@ -313,9 +254,7 @@ export default function MesEpreuvesPage() {
     loadEpreuves(id)
   }, [])
 
-  const getDateTime = (date: string, time: string) => {
-    return new Date(`${date}T${time}`)
-  }
+  const getDateTime = (date: string, time: string) => new Date(`${date}T${time}`)
 
   const sortedEpreuves = useMemo(() => {
     return [...epreuves].sort((a, b) => {
@@ -330,9 +269,7 @@ export default function MesEpreuvesPage() {
   const epreuvesByDate = useMemo(() => {
     return sortedEpreuves.reduce<Record<string, AthleteEpreuve[]>>((acc, epreuve) => {
       const dateKey = epreuve.date || "Sans date"
-      if (!acc[dateKey]) {
-        acc[dateKey] = []
-      }
+      if (!acc[dateKey]) acc[dateKey] = []
       acc[dateKey].push(epreuve)
       return acc
     }, {})
@@ -342,16 +279,43 @@ export default function MesEpreuvesPage() {
     if (!current.heureDebut || !current.heureFin || !current.date) return false
     const start = getDateTime(current.date, current.heureDebut).getTime()
     const end = getDateTime(current.date, current.heureFin).getTime()
-
     return list.some((other) => {
       if (other.id === current.id) return false
       if (!other.date || other.date !== current.date) return false
       if (!other.heureDebut || !other.heureFin) return false
-
       const otherStart = getDateTime(other.date, other.heureDebut).getTime()
       const otherEnd = getDateTime(other.date, other.heureFin).getTime()
       return start < otherEnd && end > otherStart
     })
+  }
+
+  const confirmForfait = async () => {
+    if (!selectedEpreuve || !athleteId) return
+    setSubmittingForfait(true)
+    try {
+      // Check current participation statut to avoid declaring forfait on TERMINE
+      try {
+        const statut = await getStatutParticipation(selectedEpreuve.id, athleteId)
+        if (statut?.statut === "TERMINE") {
+          toast.error("La participation est déjà terminée. Impossible de déclarer forfait.")
+          setSelectedEpreuve(null)
+          setDetailsForfait("")
+          return
+        }
+      } catch (e) {
+        // ignore statut retrieval errors and proceed
+      }
+
+      const res = await declarerForfait(selectedEpreuve.id, athleteId, detailsForfait || undefined)
+      toast.success(res?.message || "Forfait enregistré")
+      setForfaitByEpreuve((p) => ({ ...p, [selectedEpreuve.id]: { statut: res?.statutParticipation ?? "FORFAIT", dateForfait: res?.dateForfait } }))
+      setSelectedEpreuve(null)
+      setDetailsForfait("")
+    } catch (err: any) {
+      toast.error(err?.message || "Erreur lors de la déclaration de forfait")
+    } finally {
+      setSubmittingForfait(false)
+    }
   }
 
   return (
@@ -363,9 +327,7 @@ export default function MesEpreuvesPage() {
               <Calendar className="h-5 w-5" />
               <span>Mes épreuves</span>
             </CardTitle>
-            <CardDescription>
-              Calendrier et détails des épreuves programmées
-            </CardDescription>
+            <CardDescription>Calendrier et détails des épreuves programmées</CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -386,9 +348,7 @@ export default function MesEpreuvesPage() {
             ) : sortedEpreuves.length === 0 ? (
               <div className="text-center py-8">
                 <Calendar className="h-10 w-10 text-muted-foreground mx-auto" />
-                <p className="mt-3 text-sm text-muted-foreground">
-                  Aucune épreuve programmée pour le moment
-                </p>
+                <p className="mt-3 text-sm text-muted-foreground">Aucune épreuve programmée pour le moment</p>
               </div>
             ) : (
               <div className="space-y-8">
@@ -403,7 +363,7 @@ export default function MesEpreuvesPage() {
                               weekday: "long",
                               day: "numeric",
                               month: "long",
-                              year: "numeric"
+                              year: "numeric",
                             })}
                       </span>
                     </div>
@@ -420,30 +380,37 @@ export default function MesEpreuvesPage() {
                                   <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-muted-foreground">
                                     <span className="flex items-center gap-1">
                                       <Clock className="h-4 w-4" />
-                                      {date === "Sans date" ? formatDateHeureLabel(epreuve) : formatHeureOnlyLabel(epreuve)}
+                                      {epreuve.date ? (epreuve.heureDebut && epreuve.heureFin ? `${new Date(epreuve.date).toLocaleDateString("fr-FR")} ${epreuve.heureDebut} - ${epreuve.heureFin}` : new Date(epreuve.date).toLocaleDateString("fr-FR")) : (epreuve.dateHeure ? new Date(epreuve.dateHeure).toLocaleString("fr-FR") : "Date/heure non définie")}
                                     </span>
                                     <span className="flex items-center gap-1">
                                       <MapPin className="h-4 w-4" />
-                                      {getLieuLabel(epreuve)}
+                                      {epreuve.lieu?.nom ?? "Lieu non défini"}
                                     </span>
                                   </div>
                                   <div className="flex flex-wrap items-center gap-2 mt-2">
-                                    {epreuve.typeEpreuve && (
-                                      <Badge variant="outline">{getTypeEpreuveLabel(epreuve.typeEpreuve)}</Badge>
-                                    )}
-                                    {epreuve.niveauEpreuve && (
-                                      <Badge variant="secondary">{getNiveauEpreuveLabel(epreuve.niveauEpreuve)}</Badge>
-                                    )}
-                                    {epreuve.genreEpreuve && (
-                                      <Badge variant="outline">{getGenreEpreuveLabel(epreuve.genreEpreuve)}</Badge>
-                                    )}
+                                    {epreuve.typeEpreuve && <Badge variant="outline">{getTypeEpreuveLabel(epreuve.typeEpreuve)}</Badge>}
+                                    {epreuve.niveauEpreuve && <Badge variant="secondary">{getNiveauEpreuveLabel(epreuve.niveauEpreuve)}</Badge>}
+                                    {epreuve.genreEpreuve && <Badge variant="outline">{getGenreEpreuveLabel(epreuve.genreEpreuve)}</Badge>}
                                     {overlap && (
                                       <Badge variant="destructive" className="flex items-center gap-1">
                                         <AlertCircle className="h-3 w-3" />
                                         Chevauchement
                                       </Badge>
                                     )}
+                                    {forfaitByEpreuve[epreuve.id]?.statut === "FORFAIT" && <Badge variant="outline" className="ml-2">Forfait</Badge>}
                                   </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  {athleteId && forfaitByEpreuve[epreuve.id]?.statut !== "FORFAIT" && (
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => setSelectedEpreuve({ id: epreuve.id, nom: epreuve.nom })}
+                                    >
+                                      Déclarer forfait
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -455,6 +422,41 @@ export default function MesEpreuvesPage() {
                 ))}
               </div>
             )}
+
+            {/* Modal */}
+            {selectedEpreuve && (
+              <AlertDialog open onOpenChange={(open) => { if (!open) { setSelectedEpreuve(null); setDetailsForfait("") } }}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Déclarer forfait pour « {selectedEpreuve.nom} »</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Confirmez que vous souhaitez déclarer forfait pour cette épreuve. Vous pouvez renseigner des détails de performance (optionnel).
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+
+                  <div className="mt-4">
+                    <label className="block text-sm text-gray-700 mb-2">Détails (optionnel)</label>
+                    <textarea
+                      className="w-full rounded-md border p-2 text-sm"
+                      rows={4}
+                      value={detailsForfait}
+                      onChange={(e) => setDetailsForfait(e.target.value)}
+                      placeholder="Optionnel : préciser raison, circonstances..."
+                    />
+                  </div>
+
+                  <div className="mt-4 flex justify-end gap-2">
+                    <AlertDialogCancel className="">
+                      Annuler
+                    </AlertDialogCancel>
+                    <AlertDialogAction onClick={confirmForfait} className="bg-red-600 text-white">
+                      {submittingForfait ? "En cours..." : "Confirmer forfait"}
+                    </AlertDialogAction>
+                  </div>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+
           </CardContent>
         </Card>
       </main>
