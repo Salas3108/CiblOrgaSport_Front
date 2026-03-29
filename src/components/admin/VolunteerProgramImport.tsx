@@ -403,15 +403,27 @@ function VolunteerProgramImport() {
     try {
       const content = await file.text()
       const tasks = JSON.parse(content)
-      
       if (!Array.isArray(tasks)) {
         setError("Le fichier doit contenir un tableau JSON de tâches")
         return
       }
 
+      // Mapping automatique location (string) -> locationId (number)
+      const mappedTasks = tasks.map((task: any) => {
+        if (task.locationId) return task;
+        if (task.location && Array.isArray(lieux)) {
+          const lieu = lieux.find(l => l.nomLieu?.trim().toLowerCase() === String(task.location).trim().toLowerCase());
+          if (lieu) {
+            return { ...task, locationId: Number(lieu.idLieu) };
+          }
+        }
+        // Si pas trouvé, on laisse locationId à 0 (ou on peut lever une erreur)
+        return { ...task, locationId: 0 };
+      });
+
       setLoading(true)
-        await importVolunteerTasks(tasks)
-      setSuccess(`${tasks.length} tâche(s) importée(s) avec succès!`)
+      await importVolunteerTasks(mappedTasks)
+      setSuccess(`${mappedTasks.length} tâche(s) importée(s) avec succès!`)
       loadAllTasks()
     } catch (e: any) {
       setError(e?.message || "Erreur lors de l'import du fichier")
