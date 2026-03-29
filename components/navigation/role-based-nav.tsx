@@ -20,7 +20,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Accueil",           href: "/",                            icon: Home,           roles: ["admin", "official", "athlete", "spectator", "volunteer", "commissaire"] },
   { label: "Événements",        href: "/AdminEvents",                 icon: Calendar,       roles: ["official", "spectator", "volunteer"] },
   { label: "Résultats",         href: "/results",                     icon: Trophy,         roles: ["admin", "official", "athlete", "spectator", "volunteer"] },
-  { label: "Vie privée",        href: "/vie-privee",                  icon: Users,          roles: ["admin", "official", "athlete", "spectator", "volunteer", "commissaire"] },
+  
   { label: "Sécurité",          href: "/security",                    icon: Shield,         roles: ["admin", "official", "volunteer"] },
 
   // ── Admin ──

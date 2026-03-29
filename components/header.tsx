@@ -140,6 +140,27 @@ export function Header() {
                           }
                           return null
                         })()}
+
+                        {/* Vie privée (rôles autorisés) */}
+                        {(() => {
+                          const roleKey = (user?.role ?? "").toLowerCase()
+                          const allowed = ["admin", "official", "athlete", "spectator", "volunteer", "commissaire"]
+                          if (allowed.includes(roleKey)) {
+                            return (
+                              <Link
+                                href="/vie-privee"
+                                onClick={() => setUserMenuOpen(false)}
+                                className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                              >
+                                <div className="w-7 h-7 rounded-lg bg-gray-100 flex items-center justify-center">
+                                  <User className="h-3.5 w-3.5 text-gray-500" />
+                                </div>
+                                Vie privée
+                              </Link>
+                            )
+                          }
+                          return null
+                        })()}
                         <div className="mx-3 border-t border-gray-100 my-1" />
                         <button
                           onClick={() => { logout(); setUserMenuOpen(false) }}
