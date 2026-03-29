@@ -25,7 +25,9 @@ import {
   Save,
   X,
   Users,
+  Trophy,
 } from "lucide-react";
+import { getAthleteResults, type AthleteResult } from "@/src/api/resultsService";
 
 interface Athlete {
   id: number;
@@ -78,6 +80,25 @@ interface Equipe {
   nom: string;
   members: Coequipier[];
   categorie?: string;
+}
+
+function getMedailleLabel(medaille: AthleteResult["medaille"]) {
+  if (medaille === "OR") return "Or";
+  if (medaille === "ARGENT") return "Argent";
+  if (medaille === "BRONZE") return "Bronze";
+  return "-";
+}
+
+function getResultStatusLabel(statut: AthleteResult["statut"]) {
+  if (statut === "VALIDE") return "Validé";
+  if (statut === "FORFAIT") return "Forfait";
+  return "En attente";
+}
+
+function getResultStatusVariant(statut: AthleteResult["statut"]): "default" | "secondary" | "destructive" {
+  if (statut === "VALIDE") return "default";
+  if (statut === "FORFAIT") return "destructive";
+  return "secondary";
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://137.74.133.131";
@@ -188,6 +209,10 @@ export default function AthletePage() {
   const [equipeLoading, setEquipeLoading] = useState(false);
   const [equipeError, setEquipeError] = useState<string | null>(null);
 
+  const [athleteResults, setAthleteResults] = useState<AthleteResult[]>([]);
+  const [resultsLoading, setResultsLoading] = useState(false);
+  const [resultsError, setResultsError] = useState<string | null>(null);
+
   // États pour l'édition
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -285,13 +310,27 @@ export default function AthletePage() {
         });
       }
       setMessages(messagesData);
-      await loadEpreuves(athleteData?.id || id);
-      await loadEquipe(athleteData?.id || id);
+      const athleteId = athleteData?.id || id;
+      await Promise.all([loadEpreuves(athleteId), loadEquipe(athleteId), loadResults(athleteId)]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inconnue");
       console.error("Erreur:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadResults = async (id: number) => {
+    try {
+      setResultsLoading(true);
+      setResultsError(null);
+      const data = await getAthleteResults(id);
+      setAthleteResults(data);
+    } catch (err) {
+      setResultsError(err instanceof Error ? err.message : "Erreur lors du chargement des résultats");
+      setAthleteResults([]);
+    } finally {
+      setResultsLoading(false);
     }
   };
 
@@ -674,6 +713,20 @@ export default function AthletePage() {
     acc[epreuve.date].push(epreuve);
     return acc;
   }, {});
+
+  const sortedAthleteResults = [...athleteResults].sort((a, b) => {
+    if (a.dateResultat && b.dateResultat) {
+      return new Date(b.dateResultat).getTime() - new Date(a.dateResultat).getTime();
+    }
+
+    const aEpreuve = a.epreuveId ?? Number.MAX_SAFE_INTEGER;
+    const bEpreuve = b.epreuveId ?? Number.MAX_SAFE_INTEGER;
+    if (aEpreuve !== bEpreuve) return aEpreuve - bEpreuve;
+
+    const aRank = a.classement ?? Number.MAX_SAFE_INTEGER;
+    const bRank = b.classement ?? Number.MAX_SAFE_INTEGER;
+    return aRank - bRank;
+  });
 
   if (loading) {
     return (
@@ -1318,6 +1371,85 @@ export default function AthletePage() {
                                   </div>
                                 );
                               })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Mon équipe */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Trophy className="h-5 w-5" />
+                      <span>Mes résultats</span>
+                    </CardTitle>
+                    <CardDescription>Vos performances officielles et classements</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {resultsLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="text-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                          <p className="mt-3 text-sm text-muted-foreground">Chargement des résultats...</p>
+                        </div>
+                      </div>
+                    ) : resultsError ? (
+                      <div className="text-center py-8">
+                        <AlertCircle className="h-10 w-10 text-red-500 mx-auto" />
+                        <p className="mt-3 text-sm text-muted-foreground">{resultsError}</p>
+                        <Button onClick={() => loadResults(athlete.id)} className="mt-4">
+                          Réessayer
+                        </Button>
+                      </div>
+                    ) : sortedAthleteResults.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Trophy className="h-10 w-10 text-muted-foreground mx-auto" />
+                        <p className="mt-3 text-sm text-muted-foreground">Aucun résultat disponible pour le moment</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {sortedAthleteResults.map((result) => (
+                          <div key={result.id} className="rounded-lg border p-4 bg-card">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                              <div>
+                                <h3 className="font-medium">{result.epreuveNom || "Épreuve"}</h3>
+                                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                  {result.discipline && <span>{result.discipline}</span>}
+                                  {result.niveauEpreuve && <Badge variant="outline">{getNiveauEpreuveLabel(result.niveauEpreuve)}</Badge>}
+                                </div>
+                                {result.dateResultat && (
+                                  <p className="text-xs text-muted-foreground mt-2">
+                                    {new Date(result.dateResultat).toLocaleString("fr-FR")}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant={getResultStatusVariant(result.statut)}>{getResultStatusLabel(result.statut)}</Badge>
+                                <Badge variant={result.published ? "default" : "secondary"}>
+                                  {result.published ? "Publié" : "Non publié"}
+                                </Badge>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+                              <div className="rounded-md border p-3">
+                                <p className="text-xs text-muted-foreground">Performance</p>
+                                <p className="font-semibold">
+                                  {result.valeurPrincipale || "-"}
+                                  {result.unite ? ` ${result.unite}` : ""}
+                                </p>
+                              </div>
+                              <div className="rounded-md border p-3">
+                                <p className="text-xs text-muted-foreground">Classement</p>
+                                <p className="font-semibold">{result.classement ?? "-"}</p>
+                              </div>
+                              <div className="rounded-md border p-3">
+                                <p className="text-xs text-muted-foreground">Médaille</p>
+                                <p className="font-semibold">{getMedailleLabel(result.medaille)}</p>
+                              </div>
                             </div>
                           </div>
                         ))}
