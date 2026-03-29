@@ -1,64 +1,181 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { TrendingUp, Users, Calendar, Trophy, MapPin, Bell } from "lucide-react"
+import { getTodayStats } from "@/api/analyticsService"
+import type { TodayStats } from "@/types/analytics"
 
-const stats = [
+type StatCard = {
+  title: string
+  value: string
+  change: string
+  trend: "up" | "neutral"
+  icon: typeof Users
+  description: string
+}
+
+const FALLBACK_STATS: StatCard[] = [
   {
-    title: "Active Users",
-    value: "2,847",
-    change: "+12%",
-    trend: "up",
+    title: "Utilisateurs actifs",
+    value: "-",
+    change: "Donnée indisponible",
+    trend: "neutral",
     icon: Users,
-    description: "Currently online",
+    description: "Connectés aujourd'hui",
   },
   {
-    title: "Events Today",
-    value: "18",
-    change: "6 completed",
+    title: "Événements aujourd'hui",
+    value: "-",
+    change: "Donnée indisponible",
     trend: "neutral",
     icon: Calendar,
-    description: "Scheduled competitions",
+    description: "Compétitions prévues",
   },
   {
-    title: "Medals Awarded",
-    value: "45",
-    change: "+8 today",
-    trend: "up",
+    title: "Notifications envoyées",
+    value: "-",
+    change: "Donnée indisponible",
+    trend: "neutral",
+    icon: Bell,
+    description: "Mises à jour temps réel",
+  },
+  {
+    title: "Session moyenne",
+    value: "-",
+    change: "Donnée indisponible",
+    trend: "neutral",
     icon: Trophy,
-    description: "Total championships",
+    description: "Durée moyenne (min)",
   },
   {
-    title: "Venues Active",
-    value: "5",
-    change: "All operational",
+    title: "Utilisateurs vs hier",
+    value: "-",
+    change: "Donnée indisponible",
+    trend: "neutral",
+    icon: TrendingUp,
+    description: "Variation en %",
+  },
+  {
+    title: "Connexions vs hier",
+    value: "-",
+    change: "Donnée indisponible",
     trend: "neutral",
     icon: MapPin,
-    description: "Competition sites",
-  },
-  {
-    title: "Notifications Sent",
-    value: "1,234",
-    change: "+156 today",
-    trend: "up",
-    icon: Bell,
-    description: "Real-time updates",
-  },
-  {
-    title: "Records Broken",
-    value: "3",
-    change: "2 championship",
-    trend: "up",
-    icon: TrendingUp,
-    description: "New achievements",
+    description: "Variation en %",
   },
 ]
 
+const formatDelta = (value: number | undefined) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-"
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`
+}
+
+const trendFromDelta = (value: number | undefined): "up" | "neutral" => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "neutral"
+  return value >= 0 ? "up" : "neutral"
+}
+
+const formatNumber = (value: number | undefined) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-"
+  return value.toLocaleString("fr-FR")
+}
+
+const formatMinutes = (value: number | undefined) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-"
+  return `${value.toFixed(1)} min`
+}
+
 export function QuickStats() {
+  const [todayStats, setTodayStats] = useState<TodayStats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadStats = async () => {
+      try {
+        setLoading(true)
+        const data = await getTodayStats()
+        if (!mounted) return
+        setTodayStats(data)
+      } catch {
+        if (!mounted) return
+        setTodayStats(null)
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    loadStats()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const stats = useMemo<StatCard[]>(() => {
+    if (!todayStats) return FALLBACK_STATS
+
+    return [
+      {
+        title: "Utilisateurs actifs",
+        value: formatNumber(todayStats.uniqueUsers),
+        change: formatDelta(todayStats.comparedToYesterday?.users),
+        trend: trendFromDelta(todayStats.comparedToYesterday?.users),
+        icon: Users,
+        description: "Connectés aujourd'hui",
+      },
+      {
+        title: "Événements aujourd'hui",
+        value: formatNumber(todayStats.totalEvents),
+        change: "Temps réel",
+        trend: "up",
+        icon: Calendar,
+        description: "Compétitions prévues",
+      },
+      {
+        title: "Notifications envoyées",
+        value: formatNumber(todayStats.notificationsSent),
+        change: formatDelta(todayStats.comparedToYesterday?.notifications),
+        trend: trendFromDelta(todayStats.comparedToYesterday?.notifications),
+        icon: Bell,
+        description: "Mises à jour temps réel",
+      },
+      {
+        title: "Session moyenne",
+        value: formatMinutes(todayStats.avgSessionMinutes),
+        change: "Aujourd'hui",
+        trend: "neutral",
+        icon: Trophy,
+        description: "Durée moyenne",
+      },
+      {
+        title: "Utilisateurs vs hier",
+        value: formatDelta(todayStats.comparedToYesterday?.users),
+        change: "Variation",
+        trend: trendFromDelta(todayStats.comparedToYesterday?.users),
+        icon: TrendingUp,
+        description: "Comparaison journalière",
+      },
+      {
+        title: "Connexions vs hier",
+        value: formatDelta(todayStats.comparedToYesterday?.connections),
+        change: "Variation",
+        trend: trendFromDelta(todayStats.comparedToYesterday?.connections),
+        icon: MapPin,
+        description: "Comparaison journalière",
+      },
+    ]
+  }, [todayStats])
+
   return (
     <section className="space-y-6">
       <div className="text-center space-y-2">
         <h2 className="text-3xl font-bold">Championship Statistics</h2>
-        <p className="text-muted-foreground">Real-time insights from the European Swimming Championships 2026</p>
+        <p className="text-muted-foreground">
+          {loading ? "Chargement des statistiques en temps réel..." : "Insights en temps réel du championnat"}
+        </p>
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">

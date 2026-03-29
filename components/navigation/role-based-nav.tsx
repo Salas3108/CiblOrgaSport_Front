@@ -18,7 +18,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   // ── Commun ──
   { label: "Accueil",           href: "/",                            icon: Home,           roles: ["admin", "official", "athlete", "spectator", "volunteer", "commissaire"] },
-  { label: "Événements",        href: "/AdminEvents",                 icon: Calendar,       roles: ["official", "athlete", "spectator", "volunteer"] },
+  { label: "Événements",        href: "/AdminEvents",                 icon: Calendar,       roles: ["official", "spectator", "volunteer"] },
   { label: "Résultats",         href: "/results",                     icon: Trophy,         roles: ["admin", "official", "athlete", "spectator", "volunteer"] },
   { label: "Vie privée",        href: "/vie-privee",                  icon: Users,          roles: ["admin", "official", "athlete", "spectator", "volunteer", "commissaire"] },
   { label: "Incidents",          href: "/incident",                    icon: Shield,         roles: ["admin", "official", "volunteer"] },
@@ -36,12 +36,10 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Carte athlètes",    href: "/commissaire/athletes/carte",  icon: Map,            roles: ["commissaire"] },
 
   // ── Athlète ──
-  { label: "Compléter profil",  href: "/athlete",                     icon: User,           roles: ["athlete"] },
   { label: "Mes épreuves",      href: "/athlete/mes-epreuves",        icon: Calendar,       roles: ["athlete"] },
   { label: "Mon équipe",        href: "/athlete/mon-equipe",          icon: Users,          roles: ["athlete"] },
 
   // ── Volontaire ──
-  { label: "Compléter profil",  href: "/volunteer/profile",           icon: Users,          roles: ["volunteer"] },
   { label: "Mon programme",     href: "/volunteer/program",           icon: Calendar,       roles: ["volunteer"] },
 
   // ── Spectateur ──

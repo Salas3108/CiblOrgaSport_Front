@@ -135,3 +135,15 @@ export async function getAthleteResults(athleteId: number): Promise<AthleteResul
     throw error;
   }
 }
+
+export async function getMyResults(): Promise<AthleteResult[]> {
+  try {
+    const { data } = await http.get(`${API_BASE_URL}/resultats/me`, { skipGlobalErrorHandler: true } as any);
+    return normalizeResultsList(extractResults(data));
+  } catch (error) {
+    // If endpoint missing or forbidden for this token, return empty list gracefully
+    const status = (error as { response?: { status?: number } })?.response?.status;
+    if (status === 403 || status === 404) return [];
+    throw error;
+  }
+}
