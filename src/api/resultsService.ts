@@ -21,6 +21,11 @@ export interface AthleteResult {
   dateResultat: string | null;
 }
 
+interface AthleteEpreuveLike {
+  id?: number | string;
+  nom?: string;
+}
+
 function extractResults(payload: unknown): any[] {
   if (Array.isArray(payload)) return payload;
   if (!payload || typeof payload !== "object") return [];
@@ -31,6 +36,23 @@ function extractResults(payload: unknown): any[] {
   if (Array.isArray(data.results)) return data.results;
 
   return [];
+}
+
+function extractArray(payload: unknown): any[] {
+  if (Array.isArray(payload)) return payload;
+  if (!payload || typeof payload !== "object") return [];
+
+  const data = payload as Record<string, unknown>;
+  if (Array.isArray(data.data)) return data.data;
+  if (Array.isArray(data.items)) return data.items;
+  if (Array.isArray(data.epreuves)) return data.epreuves;
+
+  return [];
+}
+
+function is404(error: unknown): boolean {
+  const status = (error as { response?: { status?: number } })?.response?.status;
+  return status === 404;
 }
 
 function normalizeResult(item: any): AthleteResult {
@@ -57,7 +79,59 @@ function normalizeResult(item: any): AthleteResult {
   };
 }
 
+function normalizeResultsList(list: any[]): AthleteResult[] {
+  return list.map(normalizeResult);
+}
+
+async function deriveResultsFromEpreuves(athleteId: number): Promise<AthleteResult[]> {
+  const epreuvesResponse = await http.get(`${API_BASE_URL}/epreuves/athletes/${athleteId}`);
+  const epreuves = extractArray(epreuvesResponse.data) as AthleteEpreuveLike[];
+
+  if (epreuves.length === 0) return [];
+
+  const perEpreuve = await Promise.allSettled(
+    epreuves.map((epreuve) => http.get(`${API_BASE_URL}/resultats/commissaire/epreuves/${Number(epreuve.id)}`))
+  );
+
+  const results: AthleteResult[] = [];
+
+  perEpreuve.forEach((settled, index) => {
+    if (settled.status !== "fulfilled") return;
+
+    const epreuve = epreuves[index];
+    const rows = extractResults(settled.value.data);
+
+    rows
+      .filter((row) => Number(row?.athleteId) === athleteId)
+      .forEach((row) => {
+        const normalized = normalizeResult(row);
+        if (!normalized.epreuveNom) normalized.epreuveNom = epreuve?.nom ?? null;
+        results.push(normalized);
+      });
+  });
+
+  return results;
+}
+
 export async function getAthleteResults(athleteId: number): Promise<AthleteResult[]> {
-  const { data } = await http.get(`${API_BASE_URL}/api/athletes/${athleteId}/resultats`);
-  return extractResults(data).map(normalizeResult);
+  const directCandidates = [
+    `${API_BASE_URL}/api/athletes/${athleteId}/resultats`,
+    `${API_BASE_URL}/athletes/${athleteId}/resultats`,
+  ];
+
+  for (const endpoint of directCandidates) {
+    try {
+      const { data } = await http.get(endpoint);
+      return normalizeResultsList(extractResults(data));
+    } catch (error) {
+      if (!is404(error)) throw error;
+    }
+  }
+
+  try {
+    return await deriveResultsFromEpreuves(athleteId);
+  } catch (error) {
+    if (is404(error)) return [];
+    throw error;
+  }
 }
