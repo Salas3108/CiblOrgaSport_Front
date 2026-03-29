@@ -20,7 +20,14 @@ export const http = axios.create({
 
 // Attach JWT from localStorage on each request
 http.interceptors.request.use((config) => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = typeof window !== 'undefined'
+    ? (
+      localStorage.getItem('token') ||
+      localStorage.getItem('accessToken') ||
+      sessionStorage.getItem('token') ||
+      sessionStorage.getItem('accessToken')
+    )
+    : null;
 
   // Ensure headers is an AxiosHeaders instance to satisfy TS types
   const AxiosHeadersCtor = (axios as any).AxiosHeaders;
@@ -50,6 +57,11 @@ http.interceptors.response.use(
   (response) => response,
   (error) => {
     if (typeof window === 'undefined') return Promise.reject(error)
+
+    const skipGlobalErrorHandler = Boolean((error as any)?.config?.skipGlobalErrorHandler)
+    if (skipGlobalErrorHandler) {
+      return Promise.reject(error)
+    }
 
     const status: number | undefined = error.response?.status
     const data = error.response?.data
