@@ -1,4 +1,4 @@
-name: Deploy to AWS S3
+name: Deploy to OVH
 
 on:
   push:
@@ -27,9 +27,24 @@ jobs:
         env:
           NEXT_PUBLIC_API_BASE_URL: http://137.74.133.131
 
-      - name: Deploy to S3
-        run: aws s3 sync out/ s3://ciblorgasport-frontend-prod --delete
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: eu-west-3
+      - name: Copy files to OVH
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 137.74.133.131
+          username: ubuntu
+          key: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+          source: out/
+          target: /tmp/frontend-deploy
+          strip_components: 1
+
+      - name: Activate on Nginx
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 137.74.133.131
+          username: ubuntu
+          key: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+          script: |
+            sudo rm -rf /var/www/ciblorgasport
+            sudo mv /tmp/frontend-deploy /var/www/ciblorgasport
+            sudo chown -R www-data:www-data /var/www/ciblorgasport
+            sudo nginx -t && sudo systemctl reload nginx
