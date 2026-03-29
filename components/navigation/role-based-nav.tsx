@@ -30,8 +30,10 @@ const NAV_ITEMS: NavItem[] = [
 
   // ── Commissaire ──
   { label: "Validation",        href: "/commissaire",                 icon: ClipboardCheck, roles: ["commissaire"] },
+  { label: "Athlètes",          href: "/commissaire/athletes",        icon: User,           roles: ["commissaire"] },
   { label: "Équipes",           href: "/commissaire/equipes",         icon: Users,          roles: ["commissaire"] },
   { label: "Épreuves",          href: "/commissaire/epreuves",        icon: Trophy,         roles: ["commissaire"] },
+  { label: "Résultats",         href: "/commissaire/resultats",       icon: Trophy,         roles: ["commissaire"] },
   { label: "Carte athlètes",    href: "/commissaire/athletes/carte",  icon: Map,            roles: ["commissaire"] },
 
   // ── Athlète ──
