@@ -1,7 +1,39 @@
 import { http, apiBases } from './httpClient';
 import type { AxiosResponse } from 'axios';
+import axios from 'axios';
 
 const base = apiBases.events;
+
+const isNotFoundError = (error: unknown) => {
+  if (axios.isAxiosError(error)) {
+    return error.response?.status === 404;
+  }
+  const message = String((error as { message?: string } | undefined)?.message || error || '').toLowerCase();
+  return message.includes('404') || message.includes('not found');
+};
+
+const normalizeCompetition = (item: any) => {
+  const dateDebut = item?.dateDebut ?? item?.startDate ?? item?.dateStart ?? item?.date;
+  const dateFin = item?.dateFin ?? item?.endDate ?? item?.dateEnd ?? item?.date;
+
+  return {
+    ...item,
+    id: item?.id ?? item?.idCompetition ?? item?.competitionId,
+    name: item?.name ?? item?.nomCompetition ?? item?.nom,
+    dateDebut,
+    dateFin,
+    date: item?.date ?? dateDebut,
+    type: item?.type ?? item?.discipline ?? item?.paysHote ?? 'Competition',
+    eventId: item?.eventId ?? item?.event_id ?? item?.event?.id ?? item?.idEvenement,
+  };
+};
+
+const normalizeCompetitionList = (payload: any) =>
+  Array.isArray(payload)
+    ? payload
+        .map(normalizeCompetition)
+        .filter((competition) => competition?.id !== undefined && competition?.id !== null)
+    : [];
 
 export const listLieux = (params?: Record<string, any>) =>
   http.get(`${base}/lieux`, { params }).then((r: AxiosResponse<any>) => r.data);
@@ -36,10 +68,32 @@ export const updateEpreuve = (id: number, payload: any) =>
 export const deleteEpreuve = (id: number) =>
   http.delete(`${base}/epreuves/${id}`).then((r: AxiosResponse<any>) => r.data);
 
-export const listCompetitions = (params?: Record<string, any>) =>
-  http.get(`${base}/competitions`, { params }).then((r: AxiosResponse<any>) => r.data);
-export const getCompetition = (id: number) =>
-  http.get(`${base}/competitions/${id}`).then((r: AxiosResponse<any>) => r.data);
+export const listCompetitions = async (params?: Record<string, any>) => {
+  try {
+    const response = await http.get(`${base}/competitions`, { params });
+    return normalizeCompetitionList(response.data);
+  } catch (error) {
+    if (!isNotFoundError(error)) {
+      throw error;
+    }
+
+    const response = await http.get(`${base}/events`, { params });
+    return normalizeCompetitionList(response.data);
+  }
+};
+export const getCompetition = async (id: number) => {
+  try {
+    const response = await http.get(`${base}/competitions/${id}`);
+    return normalizeCompetition(response.data);
+  } catch (error) {
+    if (!isNotFoundError(error)) {
+      throw error;
+    }
+
+    const response = await http.get(`${base}/events/${id}`);
+    return normalizeCompetition(response.data);
+  }
+};
 export const createCompetition = (payload: any) =>
   http.post(`${base}/competitions`, payload).then((r: AxiosResponse<any>) => r.data);
 export const updateCompetition = (id: number, payload: any) =>

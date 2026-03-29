@@ -332,7 +332,7 @@ export function SecurityDashboard() {
                       <SelectValue placeholder="All venues" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All venues</SelectItem>
+                      <SelectItem value="__all__">All venues</SelectItem>
                       <SelectItem value="Centre Aquatique Olympique">Centre Aquatique Olympique</SelectItem>
                       <SelectItem value="Training Center">Training Center</SelectItem>
                       <SelectItem value="Fan Zone République">Fan Zone République</SelectItem>

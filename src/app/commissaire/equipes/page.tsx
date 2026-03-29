@@ -1,7 +1,6 @@
 "use client"
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -32,6 +31,12 @@ interface Athlete {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
+
+// Vérifier la configuration au chargement
+if (typeof window !== "undefined" && !process.env.NEXT_PUBLIC_API_BASE_URL) {
+  console.warn("⚠️ NEXT_PUBLIC_API_BASE_URL n'est pas défini. Utilisation du fallback:", API_BASE_URL)
+  console.warn("💡 Redémarrez le serveur Next.js si vous venez de créer le fichier .env.local")
+}
 
 const getAuthHeaders = () => {
   if (typeof window === "undefined") return { "Content-Type": "application/json" }
@@ -70,10 +75,23 @@ export default function CommissaireEquipesPage() {
   const fetchEquipes = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${API_BASE_URL}/commissaire/equipes`, {
+      const url = `${API_BASE_URL}/api/commissaire/equipes`
+      console.log("📡 Chargement des équipes depuis:", url)
+      
+      const response = await fetch(url, {
         headers: getAuthHeaders()
       })
-      if (!response.ok) throw new Error("Erreur lors du chargement des equipes")
+      
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "")
+        console.error(`❌ Erreur HTTP ${response.status}:`, errorText)
+        
+        if (response.status === 401) {
+          toast.error("Non authentifié. Veuillez vous reconnecter.")
+          throw new Error("Non authentifié")
+        }
+        throw new Error(`Erreur ${response.status}: ${errorText.substring(0, 100)}`)
+      }
 
       const data = await response.json()
       
@@ -87,9 +105,17 @@ export default function CommissaireEquipesPage() {
           : []
 
       setEquipes(equipesData)
+      console.log("✅ Équipes chargées:", equipesData.length, "équipes")
     } catch (error) {
-      toast.error("Erreur de chargement des equipes")
-      console.error(error)
+      const errorMessage = error instanceof Error ? error.message : "Erreur inconnue"
+      
+      if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
+        toast.error("Impossible d'atteindre le serveur. Vérifiez que le backend est démarré sur le port 8080")
+        console.error("❌ Erreur réseau. Backend accessible sur http://localhost:8080 ?")
+      } else {
+        toast.error(`Erreur de chargement des équipes: ${errorMessage}`)
+      }
+      console.error("❌ Erreur complète:", error)
     } finally {
       setLoading(false)
     }
@@ -114,7 +140,7 @@ export default function CommissaireEquipesPage() {
 
   const fetchAthletes = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/commissaire/athletes`, {
+      const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes`, {
         headers: getAuthHeaders()
       })
       if (!response.ok) throw new Error("Erreur lors du chargement des athletes")
@@ -154,7 +180,7 @@ export default function CommissaireEquipesPage() {
     }
     try {
       setAssigning(true)
-      const response = await fetch(`${API_BASE_URL}/commissaire/equipes/${selectedEquipeId}/athletes`, {
+      const response = await fetch(`${API_BASE_URL}/api/commissaire/equipes/${selectedEquipeId}/athletes`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({ athleteIds: [Number(selectedAthleteId)] })
@@ -184,7 +210,7 @@ export default function CommissaireEquipesPage() {
     }
     try {
       setCreating(true)
-      const response = await fetch(`${API_BASE_URL}/commissaire/equipes`, {
+      const response = await fetch(`${API_BASE_URL}/api/commissaire/equipes`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({ nom: newEquipeNom.trim(), pays: newEquipePays.trim() })
@@ -224,7 +250,7 @@ export default function CommissaireEquipesPage() {
     if (!confirmed) return
     try {
       setDeletingId(equipe.id)
-      const response = await fetch(`${API_BASE_URL}/commissaire/equipes/${equipe.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/commissaire/equipes/${equipe.id}`, {
         method: "DELETE",
         headers: getAuthHeaders()
       })
@@ -242,7 +268,6 @@ export default function CommissaireEquipesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

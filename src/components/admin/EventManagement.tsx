@@ -21,10 +21,11 @@ interface Event {
 
 interface Competition {
   id: number;
-  name: string;
-  dateDebut: string;
-  dateFin: string;
-  type: string;
+  name?: string;
+  dateDebut?: string;
+  dateFin?: string;
+  type?: string;
+  discipline?: string;
   event?: Event;
   epreuves?: Epreuve[];
 }
@@ -34,10 +35,14 @@ interface Epreuve {
   nom: string;
   description: string;
   competition?: Competition;
+  competitionId?: number;
   lieu?: Lieu;
+  lieuId?: number;
+  dateHeure?: string;
+  dureeMinutes?: number;
   date?: string;
   heureDebut: string;
-  heureFin: string;
+  heureFin?: string;
 }
 
 export default function EventManagement() {
@@ -72,8 +77,30 @@ export default function EventManagement() {
     lieuId: '',
     date: '',
     heureDebut: '09:00',
-    heureFin: '17:00'
+    dureeMinutes: '60'
   });
+
+  const extractDate = (dateHeure?: string) => {
+    if (!dateHeure) return '';
+    const parsed = new Date(dateHeure);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toISOString().slice(0, 10);
+  };
+
+  const extractHeureDebut = (dateHeure?: string) => {
+    if (!dateHeure) return '';
+    const parsed = new Date(dateHeure);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const computeHeureFin = (dateHeure?: string, dureeMinutes?: number) => {
+    if (!dateHeure || !dureeMinutes || dureeMinutes <= 0) return '';
+    const parsed = new Date(dateHeure);
+    if (Number.isNaN(parsed.getTime())) return '';
+    parsed.setMinutes(parsed.getMinutes() + dureeMinutes);
+    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+  };
 
   // Helper: get start/end from event/competition objects
   const getRangeFrom = (obj: any) => {
@@ -115,9 +142,9 @@ export default function EventManagement() {
     return (!startDate || dt >= startDate) && (!endDate || dt <= endDate);
   };
 
-  const validateTimeRange = (heureDebut: string, heureFin: string): boolean => {
-    if (!heureDebut || !heureFin) return true;
-    return heureDebut < heureFin;
+  const toDateHeure = (date?: string, heureDebut?: string) => {
+    if (!date || !heureDebut) return undefined;
+    return `${date}T${heureDebut}:00`;
   };
 
   useEffect(() => {
@@ -135,11 +162,37 @@ export default function EventManagement() {
         eventsService.getLieux()
       ]);
       
-      // Associer les épreuves aux compétitions
-      const competitionsWithEpreuves = competitionsData.map((comp: Competition) => ({
-        ...comp,
-        epreuves: epreuvesData.filter((epr: Epreuve) => epr.competition?.id === comp.id)
-      }));
+      // Associer les épreuves aux compétitions + enrichir l'event complet depuis eventsData
+      const competitionsWithEpreuves = competitionsData.map((comp: Competition) => {
+        const fullEvent = comp.event?.id
+          ? eventsData.find((ev: Event) => ev.id === comp.event?.id) || comp.event
+          : comp.event;
+
+        return {
+          ...comp,
+          event: fullEvent,
+          type: comp.type || comp.discipline,
+          epreuves: epreuvesData
+            .filter((epr: Epreuve) => {
+              const linkedCompetitionId = epr.competition?.id ?? epr.competitionId;
+              return linkedCompetitionId === comp.id;
+            })
+            .map((epr: Epreuve) => {
+              const date = epr.date || extractDate(epr.dateHeure);
+              const heureDebut = epr.heureDebut || extractHeureDebut(epr.dateHeure) || '09:00';
+              const duree = epr.dureeMinutes ?? 60;
+              const heureFin = epr.heureFin || computeHeureFin(epr.dateHeure, duree) || '10:00';
+              return {
+                ...epr,
+                date,
+                heureDebut,
+                heureFin,
+                dureeMinutes: duree,
+                lieu: epr.lieu || (epr.lieuId ? lieuxData.find((l: Lieu) => l.id === epr.lieuId) : undefined)
+              };
+            })
+        };
+      });
       
       setEvents(eventsData);
       setCompetitions(competitionsWithEpreuves);
@@ -245,20 +298,41 @@ export default function EventManagement() {
   const handleDeleteCompetition = async (id: number) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette compétition ?')) return;
     try {
+      // Supprimer d'abord les épreuves liées pour éviter la contrainte FK côté backend.
+      const competition = competitions.find(c => c.id === id);
+      const linkedEpreuves = competition?.epreuves || [];
+      if (linkedEpreuves.length > 0) {
+        await Promise.all(linkedEpreuves.map((ep) => eventsService.deleteEpreuve(ep.id)));
+      }
       await eventsService.deleteCompetition(id);
       loadData();
     } catch (error: any) {
-      alert('Erreur: ' + error.message);
+      const message = String(error?.message || 'Erreur inconnue');
+      if (message.includes('409') || message.includes('Conflict') || message.includes('Data integrity violation')) {
+        alert('Impossible de supprimer cette compétition car des épreuves y sont encore rattachées. Supprimez d\'abord les épreuves, puis réessayez.');
+      } else {
+        alert('Erreur: ' + message);
+      }
     }
   };
 
   const handleAddEpreuve = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCompetition) return;
+
+    if (!epreuveForm.date) {
+      setError('La date de l\'épreuve est obligatoire.');
+      return;
+    }
+
+    if (!epreuveForm.lieuId) {
+      setError('Le lieu de l\'épreuve est obligatoire.');
+      return;
+    }
     
-    // Validation des heures
-    if (!validateTimeRange(epreuveForm.heureDebut, epreuveForm.heureFin)) {
-      setError("L'heure de fin doit être postérieure à l'heure de début");
+    const dureeMinutes = Number(epreuveForm.dureeMinutes);
+    if (!Number.isFinite(dureeMinutes) || dureeMinutes <= 0) {
+      setError('La durée (minutes) doit être un nombre positif.');
       return;
     }
 
@@ -284,27 +358,24 @@ export default function EventManagement() {
       return;
     }
 
-    // Si l'épreuve a une date, vérifier qu'elle est dans la période de la compétition
-    if (epreuveForm.date) {
-      const { start: compStart, end: compEnd } = getRangeFrom(compObj);
-      if (!isDateTimeWithin(epreuveForm.date, epreuveForm.heureDebut, compStart, compEnd)) {
-        setError("La date et l'heure de l'épreuve doivent être comprises dans la période de la compétition.");
-        return;
-      }
+    const { start: compStart, end: compEnd } = getRangeFrom(compObj);
+    if (!isDateTimeWithin(epreuveForm.date, epreuveForm.heureDebut, compStart, compEnd)) {
+      setError("La date et l'heure de l'épreuve doivent être comprises dans la période de la compétition.");
+      return;
     }
 
     try {
       const epreuveData: any = {
         nom: epreuveForm.nom,
         description: epreuveForm.description,
-        heureDebut: epreuveForm.heureDebut,
-        heureFin: epreuveForm.heureFin
+        dureeMinutes
       };
       if (epreuveForm.lieuId) {
         epreuveData.lieuId = parseInt(epreuveForm.lieuId);
       }
-      if (epreuveForm.date) {
-        epreuveData.date = epreuveForm.date;
+      const dateHeure = toDateHeure(epreuveForm.date, epreuveForm.heureDebut);
+      if (dateHeure) {
+        epreuveData.dateHeure = dateHeure;
       }
       await eventsService.adminAddEpreuveToCompetition(selectedCompetition, epreuveData);
       setEpreuveForm({ 
@@ -313,7 +384,7 @@ export default function EventManagement() {
         lieuId: '', 
         date: '',
         heureDebut: '09:00',
-        heureFin: '17:00'
+        dureeMinutes: '60'
       });
       setError(null);
       loadData();
@@ -326,10 +397,20 @@ export default function EventManagement() {
   const handleUpdateEpreuve = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingEpreuve) return;
+
+    if (!editingEpreuve.date) {
+      setError('La date de l\'épreuve est obligatoire.');
+      return;
+    }
+
+    if (!editingEpreuve.lieu?.id) {
+      setError('Le lieu de l\'épreuve est obligatoire.');
+      return;
+    }
     
-    // Validation des heures
-    if (!validateTimeRange(editingEpreuve.heureDebut, editingEpreuve.heureFin)) {
-      setError("L'heure de fin doit être postérieure à l'heure de début");
+    const dureeMinutes = Number(editingEpreuve.dureeMinutes ?? 0);
+    if (!Number.isFinite(dureeMinutes) || dureeMinutes <= 0) {
+      setError('La durée (minutes) doit être un nombre positif.');
       return;
     }
 
@@ -338,7 +419,7 @@ export default function EventManagement() {
         c.epreuves && c.epreuves.some((ep: any) => ep.id === editingEpreuve.id)
       );
       
-      if (editingEpreuve.date && compObj) {
+      if (compObj) {
         const { start: compStart, end: compEnd } = getRangeFrom(compObj);
         if (!isDateTimeWithin(editingEpreuve.date, editingEpreuve.heureDebut, compStart, compEnd)) {
           setError("La date et l'heure de l'épreuve doivent être comprises dans la période de la compétition.");
@@ -349,14 +430,14 @@ export default function EventManagement() {
       const epreuveData: any = {
         nom: editingEpreuve.nom,
         description: editingEpreuve.description,
-        heureDebut: editingEpreuve.heureDebut,
-        heureFin: editingEpreuve.heureFin
+        dureeMinutes
       };
       if (editingEpreuve.lieu?.id) {
         epreuveData.lieuId = editingEpreuve.lieu.id;
       }
-      if (editingEpreuve.date) {
-        epreuveData.date = editingEpreuve.date;
+      const dateHeure = toDateHeure(editingEpreuve.date, editingEpreuve.heureDebut);
+      if (dateHeure) {
+        epreuveData.dateHeure = dateHeure;
       }
       await eventsService.updateEpreuve(editingEpreuve.id, epreuveData);
       setEditingEpreuve(null);
@@ -416,20 +497,45 @@ export default function EventManagement() {
     return competitions.filter(comp => comp.event?.id === eventId);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
+  const parseDateSafe = (value?: string | null) => {
+    if (!value) return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
+  const formatDate = (dateString?: string | null) => {
+    const date = parseDateSafe(dateString);
+    if (!date) return 'Date non définie';
+    return date.toLocaleDateString('fr-FR', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
     });
   };
 
-  const formatDateTimeRange = (dateDebut: string, dateFin: string) => {
-    const debut = new Date(dateDebut);
-    const fin = new Date(dateFin);
-    
+  const getCompetitionLabel = (comp: Competition) => {
+    if (comp.name && comp.name.trim()) return comp.name;
+    if (comp.discipline) return comp.discipline.replaceAll('_', ' ');
+    if (comp.type && comp.type.trim()) return comp.type;
+    return `Compétition #${comp.id}`;
+  };
+
+  const formatDateTimeRange = (dateDebut?: string | null, dateFin?: string | null) => {
+    const debut = parseDateSafe(dateDebut);
+    const fin = parseDateSafe(dateFin);
+
+    if (!debut && !fin) {
+      return 'Période non définie';
+    }
+    if (debut && !fin) {
+      return formatDate(dateDebut);
+    }
+    if (!debut && fin) {
+      return formatDate(dateFin);
+    }
+
     // Si c'est la même date, n'afficher qu'une date
-    if (debut.toDateString() === fin.toDateString()) {
+    if (debut!.toDateString() === fin!.toDateString()) {
       return formatDate(dateDebut);
     }
     
@@ -714,9 +820,12 @@ export default function EventManagement() {
                                     </form>
                                   ) : (
                                     <>
-                                      <div className="font-medium text-gray-900">{comp.name}</div>
+                                      <div className="font-medium text-gray-900">{getCompetitionLabel(comp)}</div>
                                       <div className="text-sm text-gray-500">
-                                        {comp.type} • {formatDateTimeRange(comp.dateDebut, comp.dateFin)}
+                                        {formatDateTimeRange(
+                                          comp.dateDebut ?? comp.event?.dateDebut,
+                                          comp.dateFin ?? comp.event?.dateFin
+                                        )}
                                         {comp.epreuves && comp.epreuves.length > 0 && (
                                           <span className="ml-2 text-blue-600 font-medium">
                                             • {comp.epreuves.length} épreuve{comp.epreuves.length !== 1 ? 's' : ''}
@@ -789,12 +898,13 @@ export default function EventManagement() {
                                                 required
                                               />
                                               <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Date (optionnel)</label>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Date</label>
                                                 <input
                                                   type="date"
                                                   value={editingEpreuve.date || ''}
                                                   onChange={(e) => setEditingEpreuve({...editingEpreuve, date: e.target.value})}
                                                   className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                                  required
                                                 />
                                               </div>
                                               <div className="grid grid-cols-2 gap-2">
@@ -809,11 +919,12 @@ export default function EventManagement() {
                                                   />
                                                 </div>
                                                 <div>
-                                                  <label className="block text-xs font-medium text-gray-700 mb-1">Heure fin</label>
+                                                  <label className="block text-xs font-medium text-gray-700 mb-1">Durée (minutes)</label>
                                                   <input
-                                                    type="time"
-                                                    value={editingEpreuve.heureFin}
-                                                    onChange={(e) => setEditingEpreuve({...editingEpreuve, heureFin: e.target.value})}
+                                                    type="number"
+                                                    min={1}
+                                                    value={String(editingEpreuve.dureeMinutes ?? 60)}
+                                                    onChange={(e) => setEditingEpreuve({...editingEpreuve, dureeMinutes: Number(e.target.value)})}
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                                     required
                                                   />
@@ -827,8 +938,9 @@ export default function EventManagement() {
                                                   setEditingEpreuve({...editingEpreuve, lieu});
                                                 }}
                                                 className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                                required
                                               >
-                                                <option value="">Lieu (optionnel)</option>
+                                                <option value="">Lieu</option>
                                                 {lieux.map((lieu) => (
                                                   <option key={lieu.id} value={lieu.id}>
                                                     {lieu.nom} - {lieu.ville}
@@ -878,7 +990,13 @@ export default function EventManagement() {
                                                   #{epreuve.id}
                                                 </span>
                                                 <button
-                                                  onClick={() => setEditingEpreuve(epreuve)}
+                                                  onClick={() => setEditingEpreuve({
+                                                    ...epreuve,
+                                                    date: epreuve.date || extractDate(epreuve.dateHeure),
+                                                    heureDebut: epreuve.heureDebut || extractHeureDebut(epreuve.dateHeure) || '09:00',
+                                                    dureeMinutes: epreuve.dureeMinutes ?? 60,
+                                                    heureFin: epreuve.heureFin || computeHeureFin(epreuve.dateHeure, epreuve.dureeMinutes ?? 60)
+                                                  })}
                                                   className="px-2 py-1 text-xs text-blue-600 bg-blue-50 rounded hover:bg-blue-100"
                                                   title="Modifier"
                                                 >
@@ -927,12 +1045,13 @@ export default function EventManagement() {
                                       required
                                     />
                                     <div>
-                                      <label className="block text-sm font-medium text-gray-700 mb-1">Date (optionnel)</label>
+                                      <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                                       <input
                                         type="date"
                                         value={epreuveForm.date}
                                         onChange={(e) => setEpreuveForm({...epreuveForm, date: e.target.value})}
                                         className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                        required
                                       />
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">
@@ -947,11 +1066,12 @@ export default function EventManagement() {
                                         />
                                       </div>
                                       <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Heure fin</label>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Durée (minutes)</label>
                                         <input
-                                          type="time"
-                                          value={epreuveForm.heureFin}
-                                          onChange={(e) => setEpreuveForm({...epreuveForm, heureFin: e.target.value})}
+                                          type="number"
+                                          min={1}
+                                          value={epreuveForm.dureeMinutes}
+                                          onChange={(e) => setEpreuveForm({...epreuveForm, dureeMinutes: e.target.value})}
                                           className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                                           required
                                         />
@@ -961,8 +1081,9 @@ export default function EventManagement() {
                                       value={epreuveForm.lieuId}
                                       onChange={(e) => setEpreuveForm({...epreuveForm, lieuId: e.target.value})}
                                       className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                                      required
                                     >
-                                      <option value="">Lieu (optionnel)</option>
+                                      <option value="">Lieu</option>
                                       {lieux.map((lieu) => (
                                         <option key={lieu.id} value={lieu.id}>
                                           {lieu.nom} - {lieu.ville}

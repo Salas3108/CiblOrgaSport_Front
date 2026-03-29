@@ -1,557 +1,1482 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
-import { Header } from "@/components/header"
-import { http } from "@/src/api/httpClient"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  CheckCircle,
+  Calendar,
   Clock,
-  XCircle,
+  MapPin,
+  User,
   FileText,
+  Flag,
+  Cake,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
   Upload,
-  Eye,
+  Download,
   MessageSquare,
   Edit,
   Save,
   X,
-} from "lucide-react"
-import { toast } from "sonner"
+  Users,
+} from "lucide-react";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface AthleteDto {
-  id: number
-  username: string | null
-  nom: string | null
-  prenom: string | null
-  dateNaissance: string | null
-  pays: string | null
-  sexe: "MASCULIN" | "FEMININ" | null
-  valide: boolean
+interface Athlete {
+  id: number;
+  nom: string;
+  prenom: string;
+  dateNaissance: string;
+  pays: string;
+  valide: boolean;
   docs: {
-    certificatMedicalUrl: string | null
-    passportUrl: string | null
-    documentGenre: string | null
-  }
-  observation: string | null
-  equipeId: number | null
-  equipeNom: string | null
-  motifRefus: string | null
+    certificatMedicalUrl?: string | null;
+    passportUrl?: string | null;
+    certificatMedical?: string | null;
+    passport?: string | null;
+  };
+  observation: string;
 }
 
-interface Message {
-  id: number
-  contenu: string
-  athleteId: number
-  createdAt: string
+interface CommissaireMessage {
+  id: number;
+  athleteId: number;
+  date: string;
+  message: string;
+  expediteur: string;
+  lu: boolean;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+interface AthleteEpreuve {
+  id: number;
+  nom: string;
+  typeEpreuve: "INDIVIDUELLE" | "COLLECTIVE";
+  niveauEpreuve: "QUALIFICATION" | "QUART_DE_FINALE" | "DEMI_FINALE" | "FINALE";
+  genreEpreuve?: "FEMININ" | "MASCULIN" | "MIXTE";
+  date: string;
+  heureDebut: string;
+  heureFin: string;
+  lieu: { id?: number; nom?: string } | string;
+}
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080"
+interface Coequipier {
+  id: number;
+  nom: string;
+  prenom: string;
+  pays: string;
+  role?: string;
+  username?: string | null;
+}
 
-function getUserIdFromToken(): number | null {
-  if (typeof window === "undefined") return null
-  const token = localStorage.getItem("token") || localStorage.getItem("accessToken")
-  if (!token) return null
+interface Equipe {
+  id: number;
+  nom: string;
+  members: Coequipier[];
+  categorie?: string;
+}
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8087";
+
+const getAuthHeaders = () => {
+  if (typeof window === "undefined") return { "Content-Type": "application/json" } as Record<string, string>;
+  const token = localStorage.getItem("token") || localStorage.getItem("accessToken");
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return headers;
+};
+
+const getAuthToken = () => {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("token") || localStorage.getItem("accessToken");
+};
+
+const resolveDocUrl = (docUrl?: string | null) => {
+  if (!docUrl) return null;
+  if (docUrl.startsWith("http://") || docUrl.startsWith("https://")) return docUrl;
+  return `${API_BASE_URL}${docUrl.startsWith("/") ? "" : "/"}${docUrl}`;
+};
+
+const getUserIdFromToken = (): number | null => {
+  if (typeof window === "undefined") return null;
+  const token = localStorage.getItem("token") || localStorage.getItem("accessToken");
+  if (!token) return null;
   try {
-    const payload = token.split(".")[1]
-    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/")
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
     const json = decodeURIComponent(
-      atob(base64).split("").map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
-    )
-    const data = JSON.parse(json)
-    const candidate = data.userId ?? data.id ?? data.sub
-    const n = Number(candidate)
-    return !Number.isNaN(n) && Number.isFinite(n) ? Math.trunc(n) : null
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const data = JSON.parse(json);
+    const candidate = data.userId ?? data.id ?? data.sub;
+    const n = Number(candidate);
+    if (!Number.isNaN(n) && Number.isFinite(n)) return Math.trunc(n);
+    return null;
   } catch {
-    return null
+    return null;
   }
+};
+
+const getUsernameFromToken = (): string | null => {
+  if (typeof window === "undefined") return null;
+  const token = localStorage.getItem("token") || localStorage.getItem("accessToken");
+  if (!token) return null;
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const data = JSON.parse(json);
+    return data.sub || data.username || null;
+  } catch {
+    return null;
+  }
+};
+
+function getTypeEpreuveLabel(type: string): string {
+  const labels: Record<string, string> = {
+    INDIVIDUELLE: "Individuelle",
+    COLLECTIVE: "Collective",
+  };
+  return labels[type] || type;
 }
 
-function getToken(): string | null {
-  if (typeof window === "undefined") return null
-  return localStorage.getItem("token") || localStorage.getItem("accessToken")
+function getNiveauEpreuveLabel(niveau: string): string {
+  const labels: Record<string, string> = {
+    QUALIFICATION: "Qualification",
+    QUART_DE_FINALE: "Quart de finale",
+    DEMI_FINALE: "Demi-finale",
+    FINALE: "Finale",
+  };
+  return labels[niveau] || niveau;
 }
 
-function statutLabel(athlete: AthleteDto): "valide" | "refuse" | "attente" {
-  if (athlete.valide) return "valide"
-  if (athlete.motifRefus) return "refuse"
-  return "attente"
+function getGenreEpreuveLabel(genre: string | undefined): string {
+  if (!genre) return "";
+  const labels: Record<string, string> = {
+    FEMININ: "Féminin",
+    MASCULIN: "Masculin",
+    MIXTE: "Mixte",
+  };
+  return labels[genre] || genre;
 }
-
-// ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function AthletePage() {
-  const router = useRouter()
-  const [athlete, setAthlete] = useState<AthleteDto | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
-  const [loading, setLoading] = useState(true)
+  const [athlete, setAthlete] = useState<Athlete | null>(null);
+  const [messages, setMessages] = useState<CommissaireMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Edit info
-  const [editMode, setEditMode] = useState(false)
-  const [infoForm, setInfoForm] = useState({ nom: "", prenom: "", dateNaissance: "", pays: "", sexe: "" })
-  const [savingInfo, setSavingInfo] = useState(false)
+  const [epreuves, setEpreuves] = useState<AthleteEpreuve[]>([]);
+  const [epreuvesLoading, setEpreuvesLoading] = useState(false);
+  const [epreuvesError, setEpreuvesError] = useState<string | null>(null);
 
-  // Documents
-  const certRef = useRef<HTMLInputElement>(null)
-  const passRef = useRef<HTMLInputElement>(null)
-  const [uploadingDoc, setUploadingDoc] = useState<"cert" | "pass" | null>(null)
+  const [equipe, setEquipe] = useState<Equipe | null>(null);
+  const [equipeLoading, setEquipeLoading] = useState(false);
+  const [equipeError, setEquipeError] = useState<string | null>(null);
 
-  // Observation
-  const [obsMode, setObsMode] = useState(false)
-  const [obsText, setObsText] = useState("")
-  const [savingObs, setSavingObs] = useState(false)
+  // États pour l'édition
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    nom: "",
+    prenom: "",
+    dateNaissance: "",
+    pays: "",
+    observation: "",
+  });
 
-  // ── Load on mount ────────────────────────────────────────────────────────────
+  // États pour les documents
+  const [uploading, setUploading] = useState(false);
+  const [documentType, setDocumentType] = useState<"certificatMedical" | "passport">("certificatMedical");
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+
+  // États pour la validation (commissaire)
+  const [isCommissaireMode, setIsCommissaireMode] = useState(false);
+  const [validationMotif, setValidationMotif] = useState("");
+  const [newMessage, setNewMessage] = useState("");
+
+  // États pour la liste des athlètes (commissaire)
+  const [allAthletes, setAllAthletes] = useState<Athlete[]>([]);
+  const [selectedAthleteId, setSelectedAthleteId] = useState<number | null>(null);
+
+  // Charger l'athlète (mode athlète ou commissaire)
+  const loadAthlete = async (id: number) => {
+    try {
+      setLoading(true);
+      setError(null);
+      let athleteData = null;
+      let messagesData: CommissaireMessage[] = [];
+
+      if (isCommissaireMode) {
+        // Mode commissaire : GET /api/commissaire/athletes/{id}/info
+        const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes/${id}/info`, {
+          headers: getAuthHeaders(),
+        });
+        if (!response.ok) {
+          let backendError = "";
+          const contentType = response.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) {
+            const errJson = await response.json();
+            backendError = errJson?.message || JSON.stringify(errJson);
+          } else {
+            backendError = await response.text();
+          }
+          throw new Error(`Erreur lors du chargement de l'athlète (HTTP ${response.status}) : ${backendError}`);
+        }
+        const data = await response.json();
+        // Le backend peut retourner directement l'athlète ou avec un wrapper
+        athleteData = data.athlete ?? data;
+
+        // Récupération des messages (endpoint GET manquant dans la collection Postman)
+        // On peut tenter un GET /api/commissaire/athletes/{id}/messages s'il existe, sinon on garde vide
+        try {
+          const messagesResponse = await fetch(`${API_BASE_URL}/api/commissaire/athletes/${id}/messages`, {
+            headers: getAuthHeaders(),
+          });
+          if (messagesResponse.ok) {
+            const messagesJson = await messagesResponse.json();
+            messagesData = Array.isArray(messagesJson) ? messagesJson : messagesJson.messages || [];
+          }
+        } catch {
+          // Ignorer les erreurs de messages
+        }
+      } else {
+        // Mode athlète : POST /api/athlete/{id}/info (pour obtenir ses infos)
+        // Mais l'endpoint POST attend un corps, il ne renvoie pas les données. Il faudrait un endpoint GET.
+        // La collection Postman ne montre pas de GET pour les infos de l'athlète connecté.
+        // On va utiliser le même endpoint POST mais avec des données vides ? Pas idéal.
+        // Alternative : utiliser GET /api/athlete/info ? Mais pas dans la collection.
+        // Pour l'instant, on fait un appel POST avec l'id et on espère qu'il renvoie les données.
+        // Sinon, on peut récupérer l'athlète via le mode commissaire (mais c'est moins propre).
+        // On utilisera donc le même endpoint que le commissaire mais en passant l'id en paramètre.
+        // Pour simplifier, on fait un GET /api/commissaire/athletes/{id}/info en mode athlète aussi
+        // (c'est le même endpoint, seul le rôle du token détermine les droits).
+        const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes/${id}/info`, {
+          headers: getAuthHeaders(),
+        });
+        if (!response.ok) {
+          throw new Error(`Erreur lors du chargement de l'athlète (HTTP ${response.status})`);
+        }
+        const data = await response.json();
+        athleteData = data.athlete ?? data;
+      }
+
+      if (athleteData) {
+        setAthlete(athleteData);
+        setEditForm({
+          nom: athleteData.nom,
+          prenom: athleteData.prenom,
+          dateNaissance: athleteData.dateNaissance,
+          pays: athleteData.pays,
+          observation: athleteData.observation,
+        });
+      }
+      setMessages(messagesData);
+      await loadEpreuves(athleteData?.id || id);
+      await loadEquipe(athleteData?.id || id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur inconnue");
+      console.error("Erreur:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadEpreuves = async (id: number) => {
+    try {
+      setEpreuvesLoading(true);
+      setEpreuvesError(null);
+
+      // Endpoint hypothétique – à adapter selon le backend réel
+      const response = await fetch(`${API_BASE_URL}/api/athletes/${id}/epreuves`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error("Erreur lors du chargement des épreuves");
+
+      const data = await response.json();
+      const list = Array.isArray(data) ? data : data.epreuves || [];
+      setEpreuves(list);
+    } catch (err) {
+      setEpreuvesError(err instanceof Error ? err.message : "Erreur inconnue");
+      setEpreuves([]);
+    } finally {
+      setEpreuvesLoading(false);
+    }
+  };
+
+  const loadEquipe = async (id: number) => {
+    try {
+      setEquipeLoading(true);
+      setEquipeError(null);
+
+      const response = await fetch(`${API_BASE_URL}/api/athlete/${id}/equipe`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) {
+        setEquipe(null);
+        setEquipeError(null);
+        return;
+      }
+      const data = await response.json();
+      const hasEquipe = data && data.id;
+      setEquipe(hasEquipe ? data : null);
+    } catch (err) {
+      setEquipeError(null);
+      setEquipe(null);
+    } finally {
+      setEquipeLoading(false);
+    }
+  };
+
+  // Charger tous les athlètes (mode commissaire)
+  const loadAllAthletes = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) throw new Error("Erreur lors du chargement des athlètes");
+
+      const data = await response.json();
+      // Le backend peut retourner un array directement ou un objet avec athletes
+      const athletes = Array.isArray(data) ? data : data.athletes || [];
+      setAllAthletes(athletes);
+    } catch (err) {
+      console.error("Erreur:", err);
+    }
+  };
 
   useEffect(() => {
-    const userId = getUserIdFromToken()
-    if (!userId) { setLoading(false); return }
-    Promise.all([fetchProfile(userId), fetchMessages(userId)]).finally(() => setLoading(false))
-  }, [])
-
-  const applyProfile = (data: AthleteDto) => {
-    setAthlete(data)
-    setInfoForm({
-      nom: data.nom ?? "",
-      prenom: data.prenom ?? "",
-      dateNaissance: data.dateNaissance ?? "",
-      pays: data.pays ?? "",
-      sexe: data.sexe ?? "",
-    })
-    setObsText(data.observation ?? "")
-  }
-
-  const fetchProfile = async (id: number) => {
-    // Probe silently with native fetch (no Axios interceptor = no toast on 404).
-    // Only POST /athlete/{id}/info is documented; try likely GET paths in order.
-    const token = getToken()
-    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
-    const candidates = [
-      `${API}/athlete/${id}/info`,
-      `${API}/athlete/${id}`,
-    ]
-    for (const url of candidates) {
+    const parseLocalUserId = (): number | null => {
       try {
-        const res = await fetch(url, { headers })
-        if (res.status === 403) { router.replace("/unauthorized"); return }
-        if (res.ok) {
-          const data: AthleteDto = await res.json()
-          applyProfile(data)
-          return
-        }
-      } catch { /* network error — try next */ }
-    }
-    // No GET endpoint exists yet: seed blank profile with JWT id so saves work
-    setAthlete({
-      id,
-      username: null,
-      nom: null,
-      prenom: null,
-      dateNaissance: null,
-      pays: null,
-      sexe: null,
-      valide: false,
-      docs: { certificatMedicalUrl: null, passportUrl: null, documentGenre: null },
-      observation: null,
-      equipeId: null,
-      equipeNom: null,
-      motifRefus: null,
-    })
-    setEditMode(true)
-  }
-
-  const fetchMessages = async (id: number) => {
-    try {
-      const { data } = await http.get<Message[]>(`${API}/athlete/${id}/messages`)
-      setMessages(Array.isArray(data) ? data : [])
-    } catch {
-      // Messages unavailable — not critical
-    }
-  }
-
-  // ── Handlers ─────────────────────────────────────────────────────────────────
-
-  const handleSaveInfo = async () => {
-    if (!athlete) return
-    try {
-      setSavingInfo(true)
-      const { data } = await http.post<AthleteDto>(`${API}/athlete/${athlete.id}/info`, {
-        nom: infoForm.nom,
-        prenom: infoForm.prenom,
-        dateNaissance: infoForm.dateNaissance,
-        pays: infoForm.pays,
-        sexe: infoForm.sexe || undefined,
-      })
-      applyProfile(data)
-      setEditMode(false)
-      toast.success("Informations mises à jour")
-    } catch (err: any) {
-      if (err?.response?.status === 403) router.replace("/unauthorized")
-      // other errors: interceptor already showed toast
-    } finally {
-      setSavingInfo(false)
-    }
-  }
-
-  const handleUploadDoc = async (type: "certificatMedical" | "passport", file: File) => {
-    if (!athlete) return
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      toast.error("Seuls les fichiers PDF sont acceptés")
-      return
-    }
-    const key = type === "certificatMedical" ? "cert" : "pass"
-    try {
-      setUploadingDoc(key)
-      const token = getToken()
-      const formData = new FormData()
-      formData.append(type, file)
-      // Do NOT set Content-Type — browser adds it with the correct boundary
-      const res = await fetch(`${API}/athlete/${athlete.id}/doc/upload`, {
-        method: "POST",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: formData,
-      })
-      if (res.status === 403) { router.replace("/unauthorized"); return }
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        toast.error(err.error || err.message || "Erreur lors de l'upload")
-        return
+        const raw = localStorage.getItem("user");
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        const candidate = parsed.id ?? parsed.userId ?? parsed.sub ?? parsed.spectatorId;
+        const n = Number(candidate);
+        if (!Number.isNaN(n) && Number.isFinite(n)) return Math.trunc(n);
+        const s = String(candidate ?? "");
+        const m = s.match(/(\d+)/);
+        return m ? Number(m[1]) : null;
+      } catch {
+        return null;
       }
-      const data: AthleteDto = await res.json()
-      setAthlete((prev) => prev ? { ...prev, docs: data.docs } : prev)
-      toast.success("Document uploadé avec succès")
-    } catch {
-      toast.error("Erreur lors de l'upload")
-    } finally {
-      setUploadingDoc(null)
-    }
-  }
+    };
 
-  const handleViewDoc = async (docType: "certificatMedical" | "passport") => {
-    if (!athlete) return
+    const loadForCurrentUser = async () => {
+      let id: number | null = null;
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/me`, {
+          headers: getAuthHeaders(),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          id = Number(data?.id);
+        }
+      } catch {
+        id = null;
+      }
+      if (!id || Number.isNaN(id)) {
+        id = getUserIdFromToken();
+      }
+      if (!id || Number.isNaN(id)) {
+        id = parseLocalUserId();
+      }
+      if (!id) id = 1;
+      loadAthlete(id);
+    };
+
+    loadForCurrentUser();
+  }, []);
+
+  // Mettre à jour les informations de l'athlète
+  const handleUpdateInfo = async () => {
+    if (!athlete) return;
+
     try {
-      const token = getToken()
-      const res = await fetch(`${API}/athlete/${athlete.id}/doc/${docType}`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      })
-      if (res.status === 404) { toast.error("Document non trouvé"); return }
-      if (!res.ok) { toast.error("Erreur lors du chargement du document"); return }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      window.open(url, "_blank")
-    } catch {
-      toast.error("Erreur lors de l'ouverture du document")
-    }
-  }
+      const response = await fetch(`${API_BASE_URL}/api/athlete/${athlete.id}/info`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAuthToken()}` },
+        body: JSON.stringify({
+          nom: editForm.nom,
+          prenom: editForm.prenom,
+          dateNaissance: editForm.dateNaissance,
+          pays: editForm.pays,
+        }),
+      });
 
-  const handleSaveObs = async () => {
-    if (!athlete) return
+      if (!response.ok) throw new Error("Erreur lors de la mise à jour");
+
+      const data = await response.json();
+      // L'endpoint peut retourner l'athlète mis à jour
+      if (data.athlete) {
+        setAthlete(data.athlete);
+        setIsEditing(false);
+        alert("Informations mises à jour avec succès!");
+      } else {
+        // Si pas de retour, on recharge
+        await loadAthlete(athlete.id);
+        setIsEditing(false);
+      }
+    } catch (err) {
+      alert("Erreur lors de la mise à jour: " + (err instanceof Error ? err.message : "Erreur inconnue"));
+    }
+  };
+
+  // Uploader un document
+  const handleUploadDocument = async () => {
+    if (!athlete || !documentFile) return;
+
     try {
-      setSavingObs(true)
-      const { data } = await http.post<AthleteDto>(`${API}/athlete/${athlete.id}/remarque`, {
-        observation: obsText,
-      })
-      setAthlete(data)
-      setObsMode(false)
-      toast.success("Remarque enregistrée")
-    } catch (err: any) {
-      if (err?.response?.status === 403) router.replace("/unauthorized")
-    } finally {
-      setSavingObs(false)
-    }
-  }
+      setUploading(true);
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+      const token = getAuthToken();
+      if (!token) throw new Error("Token manquant");
+
+      const formData = new FormData();
+      formData.append(documentType, documentFile);
+
+      const response = await fetch(`${API_BASE_URL}/api/athlete/${athlete.id}/doc/upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error("Erreur lors de l'upload");
+
+      const data = await response.json();
+      // Mettre à jour l'athlète avec les nouvelles URLs
+      setAthlete((prev) =>
+        prev
+          ? {
+              ...prev,
+              docs: {
+                ...prev.docs,
+                [documentType === "certificatMedical" ? "certificatMedicalUrl" : "passportUrl"]: data.fileUrl,
+              },
+            }
+          : prev
+      );
+      setDocumentFile(null);
+      alert("Document uploadé avec succès!");
+    } catch (err) {
+      alert("Erreur lors de l'upload: " + (err instanceof Error ? err.message : "Erreur inconnue"));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Ajouter une observation/remarque
+  const handleAddObservation = async () => {
+    if (!athlete) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/athlete/${athlete.id}/remarque`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAuthToken()}` },
+        body: JSON.stringify({
+          observation: editForm.observation,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Erreur lors de l'ajout de la remarque");
+
+      const data = await response.json();
+      if (data.athlete) {
+        setAthlete(data.athlete);
+        alert("Observation ajoutée avec succès!");
+      } else {
+        await loadAthlete(athlete.id);
+      }
+    } catch (err) {
+      alert("Erreur: " + (err instanceof Error ? err.message : "Erreur inconnue"));
+    }
+  };
+
+  // Valider ou refuser l'athlète (commissaire)
+  const handleValidation = async (valide: boolean) => {
+    if (!athlete && !selectedAthleteId) return;
+
+    const targetId = selectedAthleteId || athlete?.id;
+    if (!targetId) return;
+
+    let motif = "";
+    if (!valide) {
+      motif = prompt("Motif de refus (ex: Passeport expiré, Certificat médical manquant):") || "";
+      if (!motif) {
+        alert("Un motif est requis pour le refus");
+        return;
+      }
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes/${targetId}/validation`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAuthToken()}` },
+        body: JSON.stringify({
+          valide,
+          message: motif, // ou "motifRefus" selon le backend
+        }),
+      });
+
+      if (!response.ok) throw new Error("Erreur lors de la validation");
+
+      const data = await response.json();
+      if (data.success || data.athlete) {
+        alert(data.message || "Validation effectuée avec succès");
+
+        // Recharger les données
+        if (selectedAthleteId) {
+          loadAthlete(selectedAthleteId);
+          loadAllAthletes();
+        } else {
+          loadAthlete(athlete!.id);
+        }
+        setValidationMotif("");
+      }
+    } catch (err) {
+      alert("Erreur: " + (err instanceof Error ? err.message : "Erreur inconnue"));
+    }
+  };
+
+  // Envoyer un message (commissaire)
+  const handleSendMessage = async () => {
+    if (!athlete && !selectedAthleteId) return;
+
+    const targetId = selectedAthleteId || athlete?.id;
+    if (!targetId || !newMessage.trim()) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/commissaire/athletes/${targetId}/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAuthToken()}` },
+        body: JSON.stringify({
+          contenu: newMessage.trim(),
+        }),
+      });
+
+      if (!response.ok) throw new Error("Erreur lors de l'envoi du message");
+
+      const data = await response.json();
+      if (data.success) {
+        alert("Message envoyé avec succès!");
+        setNewMessage("");
+
+        // Recharger les messages si l'endpoint GET existe
+        try {
+          const messagesResponse = await fetch(`${API_BASE_URL}/api/commissaire/athletes/${targetId}/messages`, {
+            headers: getAuthHeaders(),
+          });
+          if (messagesResponse.ok) {
+            const messagesData = await messagesResponse.json();
+            setMessages(Array.isArray(messagesData) ? messagesData : messagesData.messages || []);
+          }
+        } catch {
+          // Ignorer
+        }
+      }
+    } catch (err) {
+      alert("Erreur: " + (err instanceof Error ? err.message : "Erreur inconnue"));
+    }
+  };
+
+  // Télécharger un document
+  const handleDownloadDocument = async (docUrl: string | null | undefined, type: string) => {
+    const resolvedUrl = resolveDocUrl(docUrl);
+    if (!resolvedUrl) {
+      alert("Document non disponible");
+      return;
+    }
+
+    try {
+      const token = getAuthToken();
+      if (!token) throw new Error("Token manquant");
+
+      const response = await fetch(resolvedUrl, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erreur ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const contentDisposition = response.headers.get("Content-Disposition") || "";
+      const fileNameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+      const fileName = fileNameMatch?.[1] || `${type}.pdf`;
+
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      alert("Erreur de téléchargement: " + (err instanceof Error ? err.message : "Erreur inconnue"));
+    }
+  };
+
+  // Charger un athlète spécifique (commissaire)
+  const handleSelectAthlete = async (id: number) => {
+    setSelectedAthleteId(id);
+    await loadAthlete(id);
+  };
+
+  const getDateTime = (date: string, time: string) => {
+    return new Date(`${date}T${time}`);
+  };
+
+  const hasOverlap = (current: AthleteEpreuve, list: AthleteEpreuve[]) => {
+    if (!current.heureDebut || !current.heureFin) return false;
+    const start = getDateTime(current.date, current.heureDebut).getTime();
+    const end = getDateTime(current.date, current.heureFin).getTime();
+
+    return list.some((other) => {
+      if (other.id === current.id) return false;
+      if (other.date !== current.date) return false;
+      if (!other.heureDebut || !other.heureFin) return false;
+
+      const otherStart = getDateTime(other.date, other.heureDebut).getTime();
+      const otherEnd = getDateTime(other.date, other.heureFin).getTime();
+      return start < otherEnd && end > otherStart;
+    });
+  };
+
+  const sortedEpreuves = [...epreuves].sort((a, b) => {
+    const aTime = getDateTime(a.date, a.heureDebut || "00:00").getTime();
+    const bTime = getDateTime(b.date, b.heureDebut || "00:00").getTime();
+    return aTime - bTime;
+  });
+
+  const epreuvesByDate = sortedEpreuves.reduce<Record<string, AthleteEpreuve[]>>((acc, epreuve) => {
+    if (!acc[epreuve.date]) {
+      acc[epreuve.date] = [];
+    }
+    acc[epreuve.date].push(epreuve);
+    return acc;
+  }, {});
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
-        <main className="container mx-auto px-4 py-8 flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
-            <p className="mt-2 text-muted-foreground">Chargement du profil...</p>
+        <main className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+              <p className="mt-4 text-muted-foreground">Chargement des données...</p>
+            </div>
           </div>
         </main>
       </div>
-    )
+    );
   }
 
-  if (!athlete) {
+  if (error) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
         <main className="container mx-auto px-4 py-8">
-          <p className="text-muted-foreground">Session introuvable. Veuillez vous reconnecter.</p>
+          <div className="text-center">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto" />
+            <h1 className="text-2xl font-bold mt-4">Erreur</h1>
+            <p className="text-muted-foreground mt-2">{error}</p>
+            <Button onClick={() => loadAthlete(athlete?.id || 1)} className="mt-4">
+              Réessayer
+            </Button>
+          </div>
         </main>
       </div>
-    )
+    );
   }
-
-  const statut = statutLabel(athlete)
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
-      <main className="container mx-auto px-4 py-8 max-w-2xl space-y-6">
-
-        {/* ── En-tête profil ── */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Mon profil</h1>
-            <p className="text-muted-foreground mt-1">{athlete.username ?? ""}</p>
+      <main className="container mx-auto px-4 py-8">
+        <div className="space-y-8">
+          {/* Mode switch Athlète/Commissaire */}
+          <div className="flex justify-between items-center">
+            <h1 className="text-3xl font-bold">
+              {isCommissaireMode ? "Mode Commissaire" : "Espace Athlète"}
+            </h1>
+            <Button
+              onClick={() => {
+                setIsCommissaireMode(!isCommissaireMode);
+                if (isCommissaireMode) {
+                  setSelectedAthleteId(null);
+                  loadAthlete(athlete?.id || 1);
+                } else {
+                  loadAllAthletes();
+                }
+              }}
+              variant="outline"
+            >
+              {isCommissaireMode ? "Mode Athlète" : "Mode Commissaire"}
+            </Button>
           </div>
-          {statut === "valide" && (
-            <Badge className="bg-green-500 text-white flex items-center gap-1">
-              <CheckCircle className="h-3 w-3" /> Validé
-            </Badge>
-          )}
-          {statut === "attente" && (
-            <Badge className="bg-orange-400 text-white flex items-center gap-1">
-              <Clock className="h-3 w-3" /> En attente
-            </Badge>
-          )}
-          {statut === "refuse" && (
-            <Badge variant="destructive" className="flex items-center gap-1">
-              <XCircle className="h-3 w-3" /> Refusé
-            </Badge>
+
+          {isCommissaireMode ? (
+            /* === MODE COMMISSAIRE === */
+            <div className="grid lg:grid-cols-3 gap-6">
+              {/* Liste des athlètes */}
+              <div className="lg:col-span-1">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Athlètes</CardTitle>
+                    <CardDescription>{allAthletes.length} athlètes enregistrés</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {allAthletes.map((athlete) => (
+                        <div
+                          key={athlete.id}
+                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                            selectedAthleteId === athlete.id
+                              ? "bg-primary/10 border-primary"
+                              : "hover:bg-muted"
+                          }`}
+                          onClick={() => handleSelectAthlete(athlete.id)}
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <div className="font-medium">
+                                {athlete.prenom} {athlete.nom}
+                              </div>
+                              <div className="text-sm text-muted-foreground">{athlete.pays}</div>
+                            </div>
+                            <Badge variant={athlete.valide ? "default" : "destructive"}>
+                              {athlete.valide ? "Validé" : "En attente"}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Détails de l'athlète sélectionné */}
+              <div className="lg:col-span-2 space-y-6">
+                {selectedAthleteId && athlete ? (
+                  <>
+                    {/* Informations de l'athlète */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center justify-between">
+                          <span>Informations de l'athlète</span>
+                          <Badge variant={athlete.valide ? "default" : "destructive"}>
+                            {athlete.valide ? "Validé" : "En attente"}
+                          </Badge>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="text-sm text-muted-foreground">Nom</label>
+                              <div className="font-medium">{athlete.nom}</div>
+                            </div>
+                            <div>
+                              <label className="text-sm text-muted-foreground">Prénom</label>
+                              <div className="font-medium">{athlete.prenom}</div>
+                            </div>
+                            <div>
+                              <label className="text-sm text-muted-foreground">Date de naissance</label>
+                              <div className="font-medium">{athlete.dateNaissance}</div>
+                            </div>
+                            <div>
+                              <label className="text-sm text-muted-foreground">Pays</label>
+                              <div className="font-medium">{athlete.pays}</div>
+                            </div>
+                          </div>
+
+                          {athlete.observation && (
+                            <div>
+                              <label className="text-sm text-muted-foreground">Observation</label>
+                              <div className="mt-1 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                {athlete.observation}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Documents */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Documents</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div>
+                              <div className="font-medium">Certificat Médical</div>
+                              <div className="text-sm text-muted-foreground">
+                                {athlete.docs.certificatMedicalUrl ? "Document disponible" : "Non fourni"}
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              {athlete.docs.certificatMedicalUrl && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    handleDownloadDocument(athlete.docs.certificatMedicalUrl, "certificat-medical")
+                                  }
+                                >
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Télécharger
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div>
+                              <div className="font-medium">Passeport</div>
+                              <div className="text-sm text-muted-foreground">
+                                {athlete.docs.passportUrl ? "Document disponible" : "Non fourni"}
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              {athlete.docs.passportUrl && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleDownloadDocument(athlete.docs.passportUrl, "passport")}
+                                >
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Télécharger
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Actions du commissaire */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Actions</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-3">
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => handleValidation(true)}
+                              disabled={athlete.valide}
+                              className="flex-1"
+                            >
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Valider l'athlète
+                            </Button>
+                            <Button
+                              onClick={() => handleValidation(false)}
+                              variant="destructive"
+                              className="flex-1"
+                            >
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Refuser
+                            </Button>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Textarea
+                              placeholder="Message à l'athlète (ex: Passeport expiré, certificat manquant...)"
+                              value={newMessage}
+                              onChange={(e) => setNewMessage(e.target.value)}
+                              rows={3}
+                            />
+                            <Button
+                              onClick={handleSendMessage}
+                              disabled={!newMessage.trim()}
+                              className="w-full"
+                            >
+                              <MessageSquare className="h-4 w-4 mr-2" />
+                              Envoyer un message
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                ) : (
+                  <Card>
+                    <CardContent className="py-12">
+                      <div className="text-center">
+                        <User className="h-12 w-12 text-muted-foreground mx-auto" />
+                        <h3 className="mt-4 font-medium">Sélectionnez un athlète</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Cliquez sur un athlète dans la liste pour voir ses informations
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* === MODE ATHLÈTE === */
+            athlete && (
+              <div className="space-y-6">
+                {/* En-tête du profil */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 bg-card border rounded-lg">
+                  <div className="flex items-center space-x-4">
+                    <div className="h-16 w-16 rounded-full bg-primary flex items-center justify-center">
+                      <User className="h-8 w-8 text-primary-foreground" />
+                    </div>
+                    <div>
+                      <h1 className="text-3xl font-bold">
+                        {athlete.prenom} {athlete.nom}
+                      </h1>
+                      <div className="flex items-center space-x-4 mt-1">
+                        <div className="flex items-center space-x-1 text-muted-foreground">
+                          <Flag className="h-4 w-4" />
+                          <span>{athlete.pays}</span>
+                        </div>
+                        <div className="flex items-center space-x-1 text-muted-foreground">
+                          <Cake className="h-4 w-4" />
+                          <span>{athlete.dateNaissance}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2 mt-2">
+                        <Badge variant={athlete.valide ? "default" : "destructive"}>
+                          {athlete.valide ? (
+                            <>
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Validé
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-3 w-3 mr-1" />
+                              En attente de validation
+                            </>
+                          )}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Button onClick={() => setIsEditing(!isEditing)} variant="outline">
+                      {isEditing ? (
+                        <X className="h-4 w-4 mr-2" />
+                      ) : (
+                        <Edit className="h-4 w-4 mr-2" />
+                      )}
+                      {isEditing ? "Annuler" : "Modifier"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid lg:grid-cols-2 gap-6">
+                  {/* Informations personnelles */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Informations personnelles</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {isEditing ? (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Nom</label>
+                              <Input
+                                value={editForm.nom}
+                                onChange={(e) => setEditForm({ ...editForm, nom: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Prénom</label>
+                              <Input
+                                value={editForm.prenom}
+                                onChange={(e) => setEditForm({ ...editForm, prenom: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Date de naissance</label>
+                              <Input
+                                type="date"
+                                value={editForm.dateNaissance}
+                                onChange={(e) => setEditForm({ ...editForm, dateNaissance: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Pays</label>
+                              <Input
+                                value={editForm.pays}
+                                onChange={(e) => setEditForm({ ...editForm, pays: e.target.value })}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">Observation</label>
+                            <Textarea
+                              value={editForm.observation}
+                              onChange={(e) => setEditForm({ ...editForm, observation: e.target.value })}
+                              rows={3}
+                              placeholder="Ajoutez une observation..."
+                            />
+                          </div>
+
+                          <div className="flex gap-2 pt-4">
+                            <Button onClick={handleUpdateInfo} className="flex-1">
+                              <Save className="h-4 w-4 mr-2" />
+                              Enregistrer
+                            </Button>
+                            <Button onClick={handleAddObservation} variant="outline" className="flex-1">
+                              Ajouter observation
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="text-sm text-muted-foreground">Nom</label>
+                              <div className="font-medium">{athlete.nom}</div>
+                            </div>
+                            <div>
+                              <label className="text-sm text-muted-foreground">Prénom</label>
+                              <div className="font-medium">{athlete.prenom}</div>
+                            </div>
+                            <div>
+                              <label className="text-sm text-muted-foreground">Date de naissance</label>
+                              <div className="font-medium">{athlete.dateNaissance}</div>
+                            </div>
+                            <div>
+                              <label className="text-sm text-muted-foreground">Pays</label>
+                              <div className="font-medium">{athlete.pays}</div>
+                            </div>
+                          </div>
+
+                          {athlete.observation && (
+                            <div>
+                              <label className="text-sm text-muted-foreground">Observation</label>
+                              <div className="mt-1 p-3 bg-muted rounded-lg">{athlete.observation}</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Documents */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Documents requis</CardTitle>
+                      <CardDescription>Téléchargez vos documents obligatoires</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-6">
+                        {/* Certificat Médical */}
+                        <div className="space-y-4 p-4 border rounded-lg">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <h3 className="font-medium">Certificat Médical</h3>
+                              <p className="text-sm text-muted-foreground">
+                                {athlete.docs.certificatMedicalUrl ? "Document disponible" : "Document non fourni"}
+                              </p>
+                            </div>
+                            <Badge variant={athlete.docs.certificatMedicalUrl ? "outline" : "destructive"}>
+                              {athlete.docs.certificatMedicalUrl ? "Fourni" : "Manquant"}
+                            </Badge>
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="file"
+                              accept=".pdf"
+                              onChange={(e) => {
+                                if (e.target.files?.[0]) {
+                                  setDocumentType("certificatMedical");
+                                  setDocumentFile(e.target.files[0]);
+                                }
+                              }}
+                              className="hidden"
+                              id="certificat-upload"
+                            />
+                            <label htmlFor="certificat-upload" className="flex-1">
+                              <Button className="w-full" variant="outline" asChild>
+                                <span>
+                                  <Upload className="h-4 w-4 mr-2" />
+                                  {athlete.docs.certificatMedicalUrl ? "Remplacer" : "Télécharger"}
+                                </span>
+                              </Button>
+                            </label>
+                            {athlete.docs.certificatMedicalUrl && (
+                              <Button
+                                onClick={() =>
+                                  handleDownloadDocument(athlete.docs.certificatMedicalUrl, "certificat-medical")
+                                }
+                                variant="outline"
+                                className="flex-1"
+                              >
+                                <Download className="h-4 w-4 mr-2" />
+                                Télécharger
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Passeport */}
+                        <div className="space-y-4 p-4 border rounded-lg">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <h3 className="font-medium">Passeport</h3>
+                              <p className="text-sm text-muted-foreground">
+                                {athlete.docs.passportUrl ? "Document disponible" : "Document non fourni"}
+                              </p>
+                            </div>
+                            <Badge variant={athlete.docs.passportUrl ? "outline" : "destructive"}>
+                              {athlete.docs.passportUrl ? "Fourni" : "Manquant"}
+                            </Badge>
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="file"
+                              accept=".pdf"
+                              onChange={(e) => {
+                                if (e.target.files?.[0]) {
+                                  setDocumentType("passport");
+                                  setDocumentFile(e.target.files[0]);
+                                }
+                              }}
+                              className="hidden"
+                              id="passport-upload"
+                            />
+                            <label htmlFor="passport-upload" className="flex-1">
+                              <Button className="w-full" variant="outline" asChild>
+                                <span>
+                                  <Upload className="h-4 w-4 mr-2" />
+                                  {athlete.docs.passportUrl ? "Remplacer" : "Télécharger"}
+                                </span>
+                              </Button>
+                            </label>
+                            {athlete.docs.passportUrl && (
+                              <Button
+                                onClick={() => handleDownloadDocument(athlete.docs.passportUrl, "passport")}
+                                variant="outline"
+                                className="flex-1"
+                              >
+                                <Download className="h-4 w-4 mr-2" />
+                                Télécharger
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Bouton d'upload si fichier sélectionné */}
+                        {documentFile && (
+                          <div className="p-4 bg-primary/10 border border-primary rounded-lg">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center space-x-2">
+                                <FileText className="h-4 w-4" />
+                                <span className="font-medium">{documentFile.name}</span>
+                              </div>
+                              <span className="text-sm text-muted-foreground">
+                                {(documentFile.size / 1024 / 1024).toFixed(2)} MB
+                              </span>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button onClick={handleUploadDocument} disabled={uploading} className="flex-1">
+                                {uploading
+                                  ? "Upload en cours..."
+                                  : `Uploader ${documentType === "certificatMedical" ? "certificat médical" : "passeport"}`}
+                              </Button>
+                              <Button onClick={() => setDocumentFile(null)} variant="outline">
+                                Annuler
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Mes épreuves */}
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between w-full">
+                      <CardTitle className="flex items-center space-x-2">
+                        <Calendar className="h-5 w-5" />
+                        <span>Mes épreuves</span>
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        <Link href="/athlete/mon-equipe">
+                          <Button variant="ghost" className="flex items-center gap-2">
+                            <Users className="h-4 w-4" />
+                            Mon équipe
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                    <CardDescription>Calendrier et détails des épreuves programmées</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {epreuvesLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="text-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                          <p className="mt-3 text-sm text-muted-foreground">Chargement des épreuves...</p>
+                        </div>
+                      </div>
+                    ) : epreuvesError ? (
+                      <div className="text-center py-8">
+                        <AlertCircle className="h-10 w-10 text-red-500 mx-auto" />
+                        <p className="mt-3 text-sm text-muted-foreground">{epreuvesError}</p>
+                        <Button onClick={() => loadEpreuves(athlete.id)} className="mt-4">
+                          Réessayer
+                        </Button>
+                      </div>
+                    ) : sortedEpreuves.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Calendar className="h-10 w-10 text-muted-foreground mx-auto" />
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          Aucune épreuve programmée pour le moment
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-8">
+                        {Object.entries(epreuvesByDate).map(([date, items]) => (
+                          <div key={date} className="space-y-4">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Calendar className="h-4 w-4" />
+                              <span>
+                                {new Date(date).toLocaleDateString("fr-FR", {
+                                  weekday: "long",
+                                  day: "numeric",
+                                  month: "long",
+                                  year: "numeric",
+                                })}
+                              </span>
+                            </div>
+                            <div className="relative border-l pl-6 space-y-4">
+                              {items.map((epreuve) => {
+                                const overlap = hasOverlap(epreuve, items);
+                                return (
+                                  <div key={epreuve.id} className="relative">
+                                    <div className="absolute -left-[9px] top-3 h-4 w-4 rounded-full border-2 border-primary bg-background"></div>
+                                    <div
+                                      className={`rounded-lg border p-4 ${
+                                        overlap ? "border-red-300 bg-red-50/50" : "bg-card"
+                                      }`}
+                                    >
+                                      <div className="flex items-start justify-between gap-4">
+                                        <div>
+                                          <h3 className="font-medium">{epreuve.nom}</h3>
+                                          <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-muted-foreground">
+                                            <span className="flex items-center gap-1">
+                                              <Clock className="h-4 w-4" />
+                                              {epreuve.heureDebut} - {epreuve.heureFin}
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                              <MapPin className="h-4 w-4" />
+                                              {typeof epreuve.lieu === "string"
+                                                ? epreuve.lieu
+                                                : epreuve.lieu?.nom || "Non spécifié"}
+                                            </span>
+                                          </div>
+                                          <div className="flex flex-wrap items-center gap-2 mt-2">
+                                            <Badge variant="outline">{getTypeEpreuveLabel(epreuve.typeEpreuve)}</Badge>
+                                            <Badge variant="secondary">
+                                              {getNiveauEpreuveLabel(epreuve.niveauEpreuve)}
+                                            </Badge>
+                                            {epreuve.genreEpreuve && (
+                                              <Badge variant="outline">{getGenreEpreuveLabel(epreuve.genreEpreuve)}</Badge>
+                                            )}
+                                            {overlap && (
+                                              <Badge variant="destructive" className="flex items-center gap-1">
+                                                <AlertCircle className="h-3 w-3" />
+                                                Chevauchement
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Mon équipe */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <Users className="h-5 w-5" />
+                      <span>Mon équipe</span>
+                    </CardTitle>
+                    <CardDescription>Informations sur votre équipe et vos coéquipiers</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {equipeLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="text-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                          <p className="mt-3 text-sm text-muted-foreground">Chargement de l'équipe...</p>
+                        </div>
+                      </div>
+                    ) : equipeError ? (
+                      <div className="text-center py-8">
+                        <AlertCircle className="h-10 w-10 text-red-500 mx-auto" />
+                        <p className="mt-3 text-sm text-muted-foreground">{equipeError}</p>
+                        <Button onClick={() => loadEquipe(athlete.id)} className="mt-4">
+                          Réessayer
+                        </Button>
+                      </div>
+                    ) : !equipe ? (
+                      <div className="text-center py-8">
+                        <Badge variant="secondary" className="mb-4">
+                          Épreuve individuelle
+                        </Badge>
+                        <Users className="h-10 w-10 text-muted-foreground mx-auto" />
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          Vous participez à une épreuve individuelle
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-6">
+                        {/* Informations de l'équipe */}
+                        <div className="p-4 bg-gradient-to-br from-primary/10 to-background border rounded-lg">
+                          <h3 className="font-semibold text-lg mb-2">{equipe.nom}</h3>
+                          {equipe.categorie && (
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">{equipe.categorie}</Badge>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Liste des coéquipiers */}
+                        <div className="space-y-3">
+                          <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                            Coéquipiers ({equipe.members?.length || 0})
+                          </h4>
+                          {equipe.members && equipe.members.length > 0 ? (
+                            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-1">
+                              {equipe.members
+                                .filter((member) => {
+                                  const currentUsername = getUsernameFromToken();
+                                  if (member.id && athlete?.id && member.id === athlete.id) return false;
+                                  if (
+                                    currentUsername &&
+                                    member.username &&
+                                    member.username.toLowerCase() === currentUsername.toLowerCase()
+                                  )
+                                    return false;
+                                  return true;
+                                })
+                                .map((member) => (
+                                  <div
+                                    key={member.id}
+                                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition"
+                                  >
+                                    <div className="flex items-center gap-3 flex-1">
+                                      <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                                        <User className="h-5 w-5 text-primary" />
+                                      </div>
+                                      <div>
+                                        <p className="font-medium">
+                                          {member.prenom} {member.nom}
+                                        </p>
+                                        {member.username && (
+                                          <p className="text-xs text-muted-foreground">{member.username}</p>
+                                        )}
+                                        <p className="text-sm text-muted-foreground">{member.pays}</p>
+                                      </div>
+                                    </div>
+                                    <Badge variant={member.role ? "secondary" : "outline"} className="ml-2">
+                                      {member.role ?? "Non spécifié"}
+                                    </Badge>
+                                  </div>
+                                ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground py-4">Aucun coéquipier pour le moment</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Messages du commissaire */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <MessageSquare className="h-5 w-5" />
+                      <span>Messages du commissaire</span>
+                      {messages.filter((m) => !m.lu).length > 0 && (
+                        <Badge variant="default" className="ml-2">
+                          {messages.filter((m) => !m.lu).length} nouveau(x)
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {messages.length > 0 ? (
+                      <div className="space-y-4">
+                        {messages.map((message) => (
+                          <div
+                            key={message.id}
+                            className={`p-4 border rounded-lg ${!message.lu ? "bg-blue-50 border-blue-200" : ""}`}
+                          >
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <div className="font-medium">{message.expediteur}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {new Date(message.date).toLocaleDateString("fr-FR")}
+                                </div>
+                              </div>
+                              {!message.lu && (
+                                <Badge variant="outline" className="bg-blue-100 text-blue-800">
+                                  Nouveau
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm">{message.message}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto" />
+                        <p className="mt-4 text-muted-foreground">Aucun message pour le moment</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )
           )}
         </div>
-
-        {/* Motif de refus */}
-        {statut === "refuse" && athlete.motifRefus && (
-          <Card className="border-red-200 bg-red-50 dark:bg-red-950/20">
-            <CardContent className="pt-4">
-              <p className="text-sm font-medium text-red-700 dark:text-red-400">Motif du refus :</p>
-              <p className="text-sm text-red-600 dark:text-red-300 mt-1">{athlete.motifRefus}</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ── Informations personnelles ── */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Informations personnelles</CardTitle>
-              {!editMode ? (
-                <Button variant="outline" size="sm" onClick={() => setEditMode(true)}>
-                  <Edit className="h-4 w-4 mr-1" /> Modifier
-                </Button>
-              ) : (
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={handleSaveInfo} disabled={savingInfo}>
-                    <Save className="h-4 w-4 mr-1" />
-                    {savingInfo ? "Enregistrement..." : "Enregistrer"}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setEditMode(false)} disabled={savingInfo}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {!editMode ? (
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-muted-foreground">Nom</span><p className="font-medium">{athlete.nom || "—"}</p></div>
-                <div><span className="text-muted-foreground">Prénom</span><p className="font-medium">{athlete.prenom || "—"}</p></div>
-                <div><span className="text-muted-foreground">Date de naissance</span><p className="font-medium">{athlete.dateNaissance || "—"}</p></div>
-                <div><span className="text-muted-foreground">Pays</span><p className="font-medium">{athlete.pays || "—"}</p></div>
-                <div><span className="text-muted-foreground">Sexe</span><p className="font-medium">{athlete.sexe === "MASCULIN" ? "Masculin" : athlete.sexe === "FEMININ" ? "Féminin" : "—"}</p></div>
-                {athlete.equipeNom && (
-                  <div><span className="text-muted-foreground">Équipe</span><p className="font-medium">{athlete.equipeNom}</p></div>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label>Nom</Label>
-                  <Input value={infoForm.nom} onChange={(e) => setInfoForm((p) => ({ ...p, nom: e.target.value }))} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Prénom</Label>
-                  <Input value={infoForm.prenom} onChange={(e) => setInfoForm((p) => ({ ...p, prenom: e.target.value }))} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Date de naissance</Label>
-                  <Input type="date" value={infoForm.dateNaissance} onChange={(e) => setInfoForm((p) => ({ ...p, dateNaissance: e.target.value }))} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Pays</Label>
-                  <Input value={infoForm.pays} onChange={(e) => setInfoForm((p) => ({ ...p, pays: e.target.value }))} />
-                </div>
-                <div className="space-y-1 col-span-2">
-                  <Label>Sexe</Label>
-                  <Select value={infoForm.sexe} onValueChange={(v) => setInfoForm((p) => ({ ...p, sexe: v }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MASCULIN">Masculin</SelectItem>
-                      <SelectItem value="FEMININ">Féminin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── Documents ── */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Documents</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {/* Certificat médical */}
-            <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <FileText className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="font-medium text-sm">Certificat médical</p>
-                  <p className="text-xs text-muted-foreground">
-                    {athlete.docs.certificatMedicalUrl ? "Fourni" : "Non fourni"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                {athlete.docs.certificatMedicalUrl && (
-                  <Button size="sm" variant="outline" onClick={() => handleViewDoc("certificatMedical")}>
-                    <Eye className="h-4 w-4 mr-1" /> Voir
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => certRef.current?.click()}
-                  disabled={uploadingDoc === "cert"}
-                >
-                  <Upload className="h-4 w-4 mr-1" />
-                  {uploadingDoc === "cert" ? "Upload..." : athlete.docs.certificatMedicalUrl ? "Remplacer" : "Uploader"}
-                </Button>
-                <input
-                  ref={certRef}
-                  type="file"
-                  accept=".pdf"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadDoc("certificatMedical", f) }}
-                />
-              </div>
-            </div>
-
-            {/* Passeport */}
-            <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <FileText className="h-5 w-5 text-muted-foreground" />
-                <div>
-                  <p className="font-medium text-sm">Passeport</p>
-                  <p className="text-xs text-muted-foreground">
-                    {athlete.docs.passportUrl ? "Fourni" : "Non fourni"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                {athlete.docs.passportUrl && (
-                  <Button size="sm" variant="outline" onClick={() => handleViewDoc("passport")}>
-                    <Eye className="h-4 w-4 mr-1" /> Voir
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => passRef.current?.click()}
-                  disabled={uploadingDoc === "pass"}
-                >
-                  <Upload className="h-4 w-4 mr-1" />
-                  {uploadingDoc === "pass" ? "Upload..." : athlete.docs.passportUrl ? "Remplacer" : "Uploader"}
-                </Button>
-                <input
-                  ref={passRef}
-                  type="file"
-                  accept=".pdf"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadDoc("passport", f) }}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ── Observation personnelle ── */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Observation personnelle</CardTitle>
-              {!obsMode ? (
-                <Button variant="outline" size="sm" onClick={() => setObsMode(true)}>
-                  <Edit className="h-4 w-4 mr-1" /> Modifier
-                </Button>
-              ) : (
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={handleSaveObs} disabled={savingObs}>
-                    <Save className="h-4 w-4 mr-1" />
-                    {savingObs ? "Enregistrement..." : "Enregistrer"}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setObsMode(false)} disabled={savingObs}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {!obsMode ? (
-              <p className="text-sm text-muted-foreground">
-                {athlete.observation || "Aucune observation renseignée."}
-              </p>
-            ) : (
-              <Textarea
-                rows={4}
-                placeholder="Saisissez votre observation..."
-                value={obsText}
-                onChange={(e) => setObsText(e.target.value)}
-              />
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── Messages du commissaire ── */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              Messages du commissaire
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {messages.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucun message reçu.</p>
-            ) : (
-              <div className="space-y-3">
-                {messages.map((msg) => (
-                  <div key={msg.id} className="p-3 border rounded-lg bg-muted/30">
-                    <p className="text-sm">{msg.contenu}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(msg.createdAt).toLocaleString("fr-FR")}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
       </main>
     </div>
-  )
+  );
 }

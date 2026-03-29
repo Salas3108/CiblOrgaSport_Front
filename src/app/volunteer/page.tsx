@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Header } from "@/components/header"
 import { ProtectedRoute } from "@/components/auth/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +13,7 @@ import {
   type VolunteerProfile,
   type AvailabilityDTO
 } from "@/src/api/volunteerService"
+import { getLieux } from "@/src/api/eventsService"
 import { Calendar, MapPin, Clock, CheckCircle, AlertCircle, Edit2, ChevronLeft, ChevronRight, Trash2, Plus } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -57,6 +57,22 @@ type VolunteerView = "profile" | "program"
 export function VolunteerPageContent({ view }: { view: VolunteerView }) {
   const [profile, setProfile] = useState<VolunteerProfile | null>(null)
   const [allTasks, setAllTasks] = useState<VolunteerTask[]>([])
+  const [lieux, setLieux] = useState<{ idLieu: string; nomLieu: string }[]>([])
+    // Charger la liste des lieux au montage
+    useEffect(() => {
+      getLieux().then((data) => {
+        if (Array.isArray(data)) {
+          // Map backend fields to frontend expected fields
+          const mapped = data.map((lieu: any) => ({
+            idLieu: lieu.id?.toString() ?? '',
+            nomLieu: lieu.nom ?? '',
+          }))
+          setLieux(mapped)
+        } else {
+          setLieux([])
+        }
+      }).catch(() => setLieux([]))
+    }, [])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [profileError, setProfileError] = useState<string | null>(null)
@@ -248,7 +264,6 @@ export function VolunteerPageContent({ view }: { view: VolunteerView }) {
   return (
     <ProtectedRoute allowedRoles={["volunteer"]}>
       <div className="min-h-screen bg-background">
-        <Header />
         <main className="container mx-auto px-4 py-8 space-y-6">
           
           {/* Page Header */}
@@ -821,7 +836,12 @@ export function VolunteerPageContent({ view }: { view: VolunteerView }) {
                                         </div>
                                         <div className="flex items-center gap-1">
                                           <MapPin className="h-3 w-3" />
-                                          {task.location}
+                                          {(() => {
+                                            const lieu = lieux.find(l => String(l.idLieu) === String(task.locationId));
+                                            if (lieu && lieu.nomLieu) return lieu.nomLieu;
+                                            if (task.location) return task.location;
+                                            return `Lieu #${task.locationId}`;
+                                          })()}
                                         </div>
                                       </div>
                                     </div>

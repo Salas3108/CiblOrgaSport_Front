@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -164,7 +163,6 @@ export default function MonEquipePage() {
 
   return (
     <div>
-      <Header />
       <main className="max-w-5xl mx-auto p-6">
         <Card>
           <CardHeader>

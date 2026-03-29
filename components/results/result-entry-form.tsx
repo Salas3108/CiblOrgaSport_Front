@@ -196,7 +196,7 @@ export function ResultEntryForm() {
                       <SelectValue placeholder="No record" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No record</SelectItem>
+                      <SelectItem value="__none__">No record</SelectItem>
                       <SelectItem value="WR">World Record</SelectItem>
                       <SelectItem value="ER">European Record</SelectItem>
                       <SelectItem value="CR">Championship Record</SelectItem>

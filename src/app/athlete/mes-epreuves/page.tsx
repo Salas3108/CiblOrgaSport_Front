@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,13 +9,63 @@ import { AlertCircle, Calendar, Clock, MapPin } from "lucide-react"
 interface AthleteEpreuve {
   id: number
   nom: string
+  description?: string
   typeEpreuve?: "INDIVIDUELLE" | "COLLECTIVE"
   niveauEpreuve?: "QUALIFICATION" | "QUART_DE_FINALE" | "DEMI_FINALE" | "FINALE"
   genreEpreuve?: "FEMININ" | "MASCULIN" | "MIXTE"
+  // Données du backend
+  dateHeure?: string  // Format ISO: "2024-03-15T14:30:00"
+  dureeMinutes?: number
+  lieuId?: number
+  // Données calculées pour compatibilité
   date?: string
   heureDebut?: string
   heureFin?: string
   lieu?: { id?: number; nom?: string | null } | null
+}
+
+// Fonction pour extraire la date d'un dateHeure ISO
+const extractDate = (dateHeure?: string): string | undefined => {
+  if (!dateHeure) return undefined
+  try {
+    return dateHeure.split('T')[0]
+  } catch {
+    return undefined
+  }
+}
+
+// Fonction pour extraire l'heure de début d'un dateHeure ISO
+const extractHeureDebut = (dateHeure?: string): string | undefined => {
+  if (!dateHeure) return undefined
+  try {
+    const timePart = dateHeure.split('T')[1]
+    return timePart ? timePart.substring(0, 5) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// Fonction pour calculer l'heure de fin
+const calculateHeureFin = (dateHeure?: string, dureeMinutes?: number): string | undefined => {
+  if (!dateHeure || !dureeMinutes) return undefined
+  try {
+    const dt = new Date(dateHeure)
+    dt.setMinutes(dt.getMinutes() + dureeMinutes)
+    return dt.toTimeString().substring(0, 5)
+  } catch {
+    return undefined
+  }
+}
+
+// Normaliser une épreuve avec les champs calculés
+const normalizeEpreuve = (epreuve: AthleteEpreuve): AthleteEpreuve => {
+  return {
+    ...epreuve,
+    date: epreuve.date || extractDate(epreuve.dateHeure),
+    heureDebut: epreuve.heureDebut || extractHeureDebut(epreuve.dateHeure),
+    heureFin: epreuve.heureFin || calculateHeureFin(epreuve.dateHeure, epreuve.dureeMinutes),
+    lieu: epreuve.lieu || (epreuve.lieuId ? { id: epreuve.lieuId, nom: null } : null)
+  }
 }
 
 function getTypeEpreuveLabel(type: string): string {
@@ -92,8 +141,62 @@ const getUserIdFromToken = (): number | null => {
 export default function MesEpreuvesPage() {
   const [athleteId, setAthleteId] = useState<number | null>(null)
   const [epreuves, setEpreuves] = useState<AthleteEpreuve[]>([])
+  const [lieuxById, setLieuxById] = useState<Record<number, string>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const formatDateHeureLabel = (epreuve: AthleteEpreuve) => {
+    if (epreuve.dateHeure) {
+      const parsed = new Date(epreuve.dateHeure)
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toLocaleString("fr-FR", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        })
+      }
+    }
+
+    if (epreuve.date && epreuve.heureDebut && epreuve.heureFin) {
+      return `${new Date(epreuve.date).toLocaleDateString("fr-FR")} ${epreuve.heureDebut} - ${epreuve.heureFin}`
+    }
+
+    if (epreuve.date) {
+      return new Date(epreuve.date).toLocaleDateString("fr-FR")
+    }
+
+    return "Date/heure non définie"
+  }
+
+  const formatHeureOnlyLabel = (epreuve: AthleteEpreuve) => {
+    if (epreuve.heureDebut && epreuve.heureFin) {
+      return `${epreuve.heureDebut} - ${epreuve.heureFin}`
+    }
+    if (epreuve.heureDebut) {
+      return epreuve.heureDebut
+    }
+    if (epreuve.dateHeure) {
+      const parsed = new Date(epreuve.dateHeure)
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+      }
+    }
+    return "Heure non définie"
+  }
+
+  const getLieuLabel = (epreuve: AthleteEpreuve) => {
+    const directNom = epreuve.lieu?.nom?.trim()
+    if (directNom) return directNom
+
+    const lieuId = epreuve.lieuId ?? epreuve.lieu?.id
+    if (lieuId && lieuxById[lieuId]) {
+      return lieuxById[lieuId]
+    }
+
+    return "Lieu non défini"
+  }
 
   const resolveAthleteId = () => {
     if (typeof window === "undefined") return null
@@ -145,13 +248,51 @@ export default function MesEpreuvesPage() {
       if (!epreuvesResponse.ok) {
         throw new Error(`Erreur lors du chargement des epreuves (${epreuvesResponse.status})`)
       }
+
+      // Récupérer les lieux pour résoudre les noms à partir de lieuId
+      const lieuxResponse = await fetch(`${API_BASE_URL}/lieux`, {
+        headers: getAuthHeaders()
+      })
+
+      const lieuxMap: Record<number, string> = {}
+      if (lieuxResponse.ok) {
+        const lieuxData = await lieuxResponse.json()
+        const lieuxList = Array.isArray(lieuxData)
+          ? lieuxData
+          : Array.isArray(lieuxData?.lieux)
+            ? lieuxData.lieux
+            : []
+
+        lieuxList.forEach((lieu: any) => {
+          if (typeof lieu?.id === "number") {
+            lieuxMap[lieu.id] = lieu?.nom || `Lieu #${lieu.id}`
+          }
+        })
+      }
+      setLieuxById(lieuxMap)
+
       const epreuvesData = await epreuvesResponse.json()
       const list = Array.isArray(epreuvesData)
         ? epreuvesData
         : Array.isArray(epreuvesData?.epreuves)
           ? epreuvesData.epreuves
           : []
-      const filtered = list.filter((epreuve: AthleteEpreuve) => assignedEpreuveIds.includes(epreuve.id))
+      const filtered = list
+        .filter((epreuve: AthleteEpreuve) => assignedEpreuveIds.includes(epreuve.id))
+        .map((epreuve: AthleteEpreuve) => normalizeEpreuve(epreuve))
+        .map((epreuve: AthleteEpreuve) => {
+          const resolvedLieuId = epreuve.lieuId ?? epreuve.lieu?.id
+          const resolvedNom = resolvedLieuId ? lieuxMap[resolvedLieuId] : undefined
+          return {
+            ...epreuve,
+            lieu: {
+              id: resolvedLieuId,
+              nom: epreuve.lieu?.nom || resolvedNom || null
+            }
+          }
+        })
+      
+      console.log("✅ Épreuves chargées et normalisées:", filtered)
       setEpreuves(filtered)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur inconnue")
@@ -215,7 +356,6 @@ export default function MesEpreuvesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
       <main className="container mx-auto px-4 py-8">
         <Card>
           <CardHeader>
@@ -278,17 +418,13 @@ export default function MesEpreuvesPage() {
                                 <div>
                                   <h3 className="font-medium">{epreuve.nom}</h3>
                                   <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-muted-foreground">
-                                    {epreuve.heureDebut && epreuve.heureFin && (
-                                      <span className="flex items-center gap-1">
-                                        <Clock className="h-4 w-4" />
-                                        {epreuve.heureDebut} - {epreuve.heureFin}
-                                      </span>
-                                    )}
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="h-4 w-4" />
+                                      {date === "Sans date" ? formatDateHeureLabel(epreuve) : formatHeureOnlyLabel(epreuve)}
+                                    </span>
                                     <span className="flex items-center gap-1">
                                       <MapPin className="h-4 w-4" />
-                                      {epreuve.lieu && typeof epreuve.lieu === "object"
-                                        ? epreuve.lieu.nom || "-"
-                                        : "-"}
+                                      {getLieuLabel(epreuve)}
                                     </span>
                                   </div>
                                   <div className="flex flex-wrap items-center gap-2 mt-2">
