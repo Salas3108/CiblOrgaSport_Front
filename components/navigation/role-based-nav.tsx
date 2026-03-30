@@ -45,6 +45,7 @@ const NAV_ITEMS: NavItem[] = [
 
   // ── Spectateur ──
   { label: "Spectateurs",       href: "/spectator",                   icon: Eye,            roles: ["spectator"] },
+  { label: "Billetterie",       href: "/billetterie",                 icon: Calendar,       roles: ["spectator"] },
 
   // ── Géolocalisation ──
   { label: "Fan Zones",         href: "/fanzones",                    icon: Navigation,     roles: ["spectator", "athlete", "volunteer"] },
