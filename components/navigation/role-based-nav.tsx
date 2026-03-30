@@ -44,7 +44,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Mon programme",     href: "/volunteer/program",           icon: Calendar,       roles: ["volunteer"] },
 
   // ── Spectateur ──
-  { label: "Spectateurs",       href: "/spectator",                   icon: Eye,            roles: ["spectator"] },
+  //{ label: "Spectateurs",       href: "/spectator",                   icon: Eye,            roles: ["spectator"] },
   { label: "Billetterie",       href: "/billetterie",                 icon: Calendar,       roles: ["spectator"] },
 
   // ── Géolocalisation ──
