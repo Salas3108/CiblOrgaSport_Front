@@ -6,10 +6,19 @@
 
 import { useEffect, useState } from 'react'
 import AnalyticsHeader from '@/components/analytics/AnalyticsHeader'
-import StatsGrid from '@/components/analytics/StatsGrid'
 import MetabaseFrame from '@/components/analytics/MetabaseFrame'
 import { METABASE_BASE_URL, METABASE_CHARTS } from '@/config/metabaseConfig'
 import type { MetabaseChart, Period } from '@/types/analytics'
+
+const MB = `${METABASE_BASE_URL}/embed/question`
+const P = '#bordered=false&titled=false&theme=night'
+
+const KPI_CARDS = [
+  { key: 'kpi_connexions', title: 'Connexions', url: `${MB}/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZXNvdXJjZSI6eyJxdWVzdGlvbiI6NTJ9LCJwYXJhbXMiOnt9LCJleHAiOjk5OTk5OTk5OTk5fQ.LBUC9fmPMJ4TzBP0iosVA55SazRWyCiFclq019vB4uE${P}` },
+  { key: 'kpi_users',      title: 'Utilisateurs', url: `${MB}/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZXNvdXJjZSI6eyJxdWVzdGlvbiI6NTN9LCJwYXJhbXMiOnt9LCJleHAiOjk5OTk5OTk5OTk5fQ.hS58N1T9tqQ0yiYS5jztE7-37AfX5DqCYOx0Khi5Uro${P}` },
+  { key: 'kpi_notif',      title: 'Notifications', url: `${MB}/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZXNvdXJjZSI6eyJxdWVzdGlvbiI6NTR9LCJwYXJhbXMiOnt9LCJleHAiOjk5OTk5OTk5OTk5fQ.MxwSbPYdMYl_O6B1W4i-6B8_T_fJ6AzNiBtsto33vks${P}` },
+  { key: 'kpi_session',    title: 'Temps moyen / session', url: `${MB}/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyZXNvdXJjZSI6eyJxdWVzdGlvbiI6NTV9LCJwYXJhbXMiOnt9LCJleHAiOjk5OTk5OTk5OTk5fQ.Al_saY-pX7vrJ1MTwcU2UASb31m2_z7N4n_RCP3N8Cg${P}` },
+]
 
 // ── Configuration des 6 graphiques ──────────────────────────────────────────
 const CHARTS: MetabaseChart[] = [
@@ -114,8 +123,20 @@ export default function AnalyticsPage() {
         lastUpdated={lastUpdated}
       />
 
-      {/* StatCards temps réel */}
-      <StatsGrid />
+      {/* KPIs Metabase */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {KPI_CARDS.map((kpi) => (
+          <div key={kpi.key} className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm" style={{ height: 120 }}>
+            <p className="text-xs font-semibold text-gray-500 px-4 pt-3 uppercase tracking-wide">{kpi.title}</p>
+            {metabaseAvailable !== false && (
+              <iframe src={kpi.url} className="w-full border-0" style={{ height: 80 }} title={kpi.title} loading="lazy" />
+            )}
+            {metabaseAvailable === false && (
+              <div className="flex items-center justify-center h-16 text-gray-300 text-2xl">—</div>
+            )}
+          </div>
+        ))}
+      </div>
 
       {/* Grille de graphiques Metabase */}
       {metabaseAvailable !== null && (
