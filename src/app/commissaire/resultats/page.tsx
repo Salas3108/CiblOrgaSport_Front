@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Header } from "@/components/header"
+
 import eventsService, { getStatutParticipation, declarerForfait } from "@/src/api/eventsService"
 import { http } from "@/src/api/httpClient"
 import { Badge } from "@/components/ui/badge"
@@ -349,7 +349,7 @@ export default function CommissaireResultatsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-8">
 

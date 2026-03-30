@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Header } from "@/components/header"
+
 import { http } from "@/src/api/httpClient"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -210,7 +210,7 @@ export default function CommissaireAthletesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-6">
 
