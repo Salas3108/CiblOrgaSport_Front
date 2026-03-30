@@ -271,8 +271,7 @@ export function LoginForm() {
             </span>
           ) : (
             <span className="block mt-2 text-xs text-red-600">
-              NEXT_PUBLIC_API_BASE_URL est manquant dans .env.local. Utilisation de "http://137.74.133.131". Exemple :
-              NEXT_PUBLIC_API_BASE_URL="http://137.74.133.131". Après l’ajout, redémarrez : "npm run dev".
+             
             </span>
           )}
           <span className="block mt-2 text-xs text-muted-foreground">
