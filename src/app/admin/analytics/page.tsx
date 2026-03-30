@@ -96,20 +96,19 @@ export default function AnalyticsPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-gray-50 px-6 py-6 space-y-6">
+    <div className="min-h-screen bg-slate-950 px-6 py-6 space-y-6">
 
       {/* Bannière Metabase hors-ligne */}
       {metabaseAvailable === false && (
-        <div className="flex items-center gap-3 bg-orange-50 border border-orange-200 text-orange-700 rounded-xl px-4 py-3 text-sm">
+        <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-xl px-4 py-3 text-sm">
           <span className="text-lg">⚠️</span>
           <div>
             <span className="font-semibold">Metabase non accessible</span>
-            <span className="ml-2">—</span>
-            <span className="ml-2">Vérifiez que Docker tourne sur {METABASE_BASE_URL}</span>
+            <span className="ml-2 text-amber-500/70">— Vérifiez que le serveur tourne sur {METABASE_BASE_URL}</span>
           </div>
           <button
             onClick={() => window.location.reload()}
-            className="ml-auto shrink-0 text-xs px-3 py-1.5 rounded-lg border border-orange-300 hover:bg-orange-100 transition-colors"
+            className="ml-auto shrink-0 text-xs px-3 py-1.5 rounded-lg border border-amber-500/30 hover:bg-amber-500/10 transition-colors"
           >
             Réessayer
           </button>
@@ -126,13 +125,13 @@ export default function AnalyticsPage() {
       {/* KPIs Metabase */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {KPI_CARDS.map((kpi) => (
-          <div key={kpi.key} className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm" style={{ height: 120 }}>
-            <p className="text-xs font-semibold text-gray-500 px-4 pt-3 uppercase tracking-wide">{kpi.title}</p>
+          <div key={kpi.key} className="bg-slate-900 border border-slate-700/50 rounded-2xl overflow-hidden shadow-lg" style={{ height: 130 }}>
+            <p className="text-[10px] font-semibold text-slate-400 px-4 pt-3 uppercase tracking-widest">{kpi.title}</p>
             {metabaseAvailable !== false && (
-              <iframe src={kpi.url} className="w-full border-0" style={{ height: 80 }} title={kpi.title} loading="lazy" />
+              <iframe src={kpi.url} className="w-full border-0" style={{ height: 90 }} title={kpi.title} loading="lazy" />
             )}
             {metabaseAvailable === false && (
-              <div className="flex items-center justify-center h-16 text-gray-300 text-2xl">—</div>
+              <div className="flex items-center justify-center h-20 text-slate-600 text-2xl font-light">—</div>
             )}
           </div>
         ))}
@@ -161,7 +160,7 @@ export default function AnalyticsPage() {
           {CHARTS.map((chart) => (
             <div
               key={chart.key}
-              className={`bg-gray-100 border border-gray-200 rounded-2xl animate-pulse ${chart.colSpan === 2 ? 'md:col-span-2' : ''}`}
+              className={`bg-slate-900 border border-slate-700/50 rounded-2xl animate-pulse ${chart.colSpan === 2 ? 'md:col-span-2' : ''}`}
               style={{ height: chart.height }}
             />
           ))}
