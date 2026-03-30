@@ -22,6 +22,8 @@ export default function FullscreenModal({ isOpen, onClose, iframeUrl, title }: R
 
   if (!isOpen) return null
 
+  const fullUrl = iframeUrl.startsWith('http') ? iframeUrl : `${METABASE_BASE_URL}${iframeUrl}`
+
   return (
     <div className="fixed inset-0 z-3000 flex flex-col bg-white">
       {/* Header */}
@@ -32,7 +34,7 @@ export default function FullscreenModal({ isOpen, onClose, iframeUrl, title }: R
         </div>
         <div className="flex items-center gap-2">
           <a
-            href={`${METABASE_BASE_URL}${iframeUrl}`}
+            href={fullUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:text-green-700 hover:border-green-300 hover:bg-green-50 transition-colors"
@@ -52,7 +54,7 @@ export default function FullscreenModal({ isOpen, onClose, iframeUrl, title }: R
       {/* Iframe */}
       <div className="flex-1 bg-gray-50">
         <iframe
-          src={`${METABASE_BASE_URL}${iframeUrl}`}
+          src={fullUrl}
           className="w-full h-full border-0"
           title={title}
           loading="lazy"

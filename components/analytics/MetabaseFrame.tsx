@@ -26,7 +26,7 @@ export default function MetabaseFrame({
   const [loaded, setLoaded] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
 
-  const fullUrl = `${METABASE_BASE_URL}${iframeUrl}`
+  const fullUrl = iframeUrl.startsWith('http') ? iframeUrl : `${METABASE_BASE_URL}${iframeUrl}`
 
   return (
     <>
